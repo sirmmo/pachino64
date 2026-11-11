@@ -31,7 +31,7 @@ document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 const HORIZON = new THREE.Color(0xcfe9ff);
 scene.fog = new THREE.Fog(HORIZON, 90, 300);
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 900);
+const camera = new THREE.PerspectiveCamera(window.innerWidth < window.innerHeight ? 72 : 55, window.innerWidth / window.innerHeight, 0.1, 900);
 
 { // gradient sky dome
   const g = new THREE.SphereGeometry(600, 32, 16);
@@ -1354,6 +1354,63 @@ window.addEventListener('mousemove', (e) => {
 });
 window.addEventListener('wheel', (e) => { camState.dist = clamp(camState.dist + Math.sign(e.deltaY) * 1.2, 6, 20); }, { passive: true });
 $('dialog').addEventListener('mousedown', (e) => { e.stopPropagation(); advanceDialog(); });
+$('title').addEventListener('mousedown', () => { initAudio(); if (G.mode === 'title') startGame(); });
+
+// ---- Touch controls: left thumb = stick, drag elsewhere = camera, on-screen buttons ----
+const touch = { on: false, x: 0, y: 0, jump: false, crouch: false, stickId: null, camId: null, ox: 0, oy: 0, lx: 0, ly: 0 };
+const stickEl = $('stick'), knobEl = $('knob');
+function enableTouch() {
+  if (touch.on) return; touch.on = true; document.body.classList.add('touch');
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  sun.shadow.mapSize.set(1024, 1024); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+}
+if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) enableTouch();
+function stickHome() { stickEl.style.left = ''; stickEl.style.top = ''; stickEl.style.bottom = ''; knobEl.style.transform = ''; }
+function onTouchStart(e) {
+  e.preventDefault(); initAudio(); enableTouch();
+  if (G.mode === 'title') { startGame(); return; }
+  if (G.mode === 'dialog') { advanceDialog(); return; }
+  if (G.mode !== 'play' && G.mode !== 'starget') return;
+  for (const t of e.changedTouches) {
+    if (t.clientX < window.innerWidth * 0.42 && touch.stickId === null) {
+      touch.stickId = t.identifier; touch.ox = t.clientX; touch.oy = t.clientY; touch.x = touch.y = 0;
+      stickEl.style.left = (t.clientX - 62) + 'px'; stickEl.style.top = (t.clientY - 62) + 'px'; stickEl.style.bottom = 'auto';
+    } else if (touch.camId === null) { touch.camId = t.identifier; touch.lx = t.clientX; touch.ly = t.clientY; }
+  }
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === touch.stickId) {
+      let dx = (t.clientX - touch.ox) / 52, dy = (t.clientY - touch.oy) / 52; const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
+      touch.x = Math.abs(dx) < 0.12 ? 0 : dx; touch.y = Math.abs(dy) < 0.12 ? 0 : -dy;
+      knobEl.style.transform = `translate(${dx * 40}px, ${dy * 40}px)`;
+    } else if (t.identifier === touch.camId) {
+      camState.yaw -= (t.clientX - touch.lx) * 0.007; camState.pitch = clamp(camState.pitch + (t.clientY - touch.ly) * 0.005, -0.15, 1.2);
+      camState.manualT = 0; touch.lx = t.clientX; touch.ly = t.clientY;
+    }
+  }
+}
+function onTouchEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === touch.stickId) { touch.stickId = null; touch.x = touch.y = 0; stickHome(); }
+    if (t.identifier === touch.camId) touch.camId = null;
+  }
+}
+for (const el of [renderer.domElement, $('title')]) el.addEventListener('touchstart', onTouchStart, { passive: false });
+renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+window.addEventListener('touchend', onTouchEnd); window.addEventListener('touchcancel', onTouchEnd);
+function touchButton(id, down, up) {
+  const el = $(id);
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); initAudio(); el.classList.add('on'); down(); }, { passive: false });
+  const end = (e) => { e.preventDefault(); el.classList.remove('on'); if (up) up(); };
+  el.addEventListener('touchend', end, { passive: false }); el.addEventListener('touchcancel', end, { passive: false });
+}
+touchButton('tJump', () => { touch.jump = true; if (G.mode === 'dialog') advanceDialog(); else input.jumpP = true; }, () => (touch.jump = false));
+touchButton('tCrouch', () => { touch.crouch = true; input.crouchP = true; }, () => (touch.crouch = false));
+touchButton('tSlash', () => { if (G.mode === 'dialog') advanceDialog(); else input.attackP = true; });
+touchButton('tPause', () => togglePause());
+touchButton('prompt', () => { input.talkP = true; });
 const padPrev = {};
 function pollInput() {
   let x = 0, y = 0;
@@ -1361,7 +1418,8 @@ function pollInput() {
   let cx = 0, cy = 0;
   if (keys.has('ArrowLeft') || keys.has('KeyQ')) cx += 1; if (keys.has('ArrowRight')) cx -= 1;
   if (keys.has('ArrowUp')) cy += 1; if (keys.has('ArrowDown')) cy -= 1;
-  let jump = KEYMAP.jump.some((k) => keys.has(k)), crouch = KEYMAP.crouch.some((k) => keys.has(k));
+  let jump = KEYMAP.jump.some((k) => keys.has(k)) || touch.jump, crouch = KEYMAP.crouch.some((k) => keys.has(k)) || touch.crouch;
+  x += touch.x; y += touch.y;
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const gp of pads) {
     if (!gp) continue;
@@ -1385,7 +1443,7 @@ function pollInput() {
 // Screens & flow
 // ---------------------------------------------------------------------------
 function startGame() {
-  $('title').style.display = 'none'; G.mode = 'play'; initAudio(); startMusic(); camState.snap = true;
+  $('title').style.display = 'none'; document.body.classList.add('playing'); G.mode = 'play'; initAudio(); startMusic(); camState.snap = true;
   toast('Talk to Nonno Broccolo!', 3);
 }
 function togglePause() {
@@ -1401,7 +1459,7 @@ $('keepplaying').onclick = () => { $('ending').style.display = 'none'; G.mode = 
 function respawnFresh() { player.pos.copy(G.checkpoint); player.vel.set(0, 0, 0); player.dead = false; player.action = 'normal'; player.invuln = 2; setHealth(8); pPivot.rotation.set(0, 0, 0); camState.snap = true; }
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight; camera.fov = camera.aspect < 1 ? 72 : 55; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // ---------------------------------------------------------------------------

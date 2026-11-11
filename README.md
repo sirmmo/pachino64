@@ -18,6 +18,9 @@ Recover the 7 Golden Stars.
 | Talk | `E` | Y |
 | Pause / mute | `Esc` / `M` | Start |
 
+On phones and tablets, on-screen controls appear: left thumb moves, dragging elsewhere turns the camera,
+and there are JUMP, SLASH and DOWN (crouch / ground pound) buttons. Landscape works best.
+
 Crouch + jump while running is a long jump, crouch + jump while standing is a backflip,
 and jumping again right after hitting a wall in the air is a wall kick.
 
