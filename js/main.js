@@ -2,7 +2,7 @@
 // Vegetables are friends, steaks and fish are enemies. Collect the 7 Golden Stars.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
-import { initAudio, sfx, startMusic, toggleMute } from './audio.js';
+import { initAudio, sfx, startMusic, toggleMute, setMusicMood } from './audio.js';
 
 // ---------------------------------------------------------------------------
 // Constants & helpers
@@ -11,6 +11,9 @@ const GRAV = 34, MAX_FALL = 32, RUN = 9.5, STEP = 0.4;
 const SEA = -1.0;
 const POND = { x: 38, z: 8, r: 14, level: -0.6 };
 const SPAWN = new THREE.Vector3(0, 0, 52);
+// World 2 (Isola Brace) lives far to the east in the same scene, floating in a sea of hot sauce
+const W2X = 2000, LAVA = -0.5;
+const lavaAt = (x) => (x > 1000 ? LAVA : null);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
@@ -81,11 +84,28 @@ const texStone = canvasTex(64, (g, s) => speckle(g, s, '#c9c2b8', ['#b0a89c', '#
 const matGrassTop = new THREE.MeshLambertMaterial({ map: texGrassTop });
 const matDirt = new THREE.MeshLambertMaterial({ map: texDirt });
 const matStone = new THREE.MeshLambertMaterial({ map: texStone });
+// World 2 materials: basalt with glowing cracks, bubbling sauce, griddle plates
+const texBasaltTop = canvasTex(64, (g, s) => speckle(g, s, '#5c4b4f', ['#4a3c40', '#6c5a5e', '#3e3236', '#7a6860'], 500));
+const texBasaltSide = canvasTex(64, (g, s) => {
+  speckle(g, s, '#2e2022', ['#3a2a2c', '#241819', '#44302e'], 300);
+  g.strokeStyle = '#ff7a1a'; g.lineWidth = 1.5;
+  for (let i = 0; i < 5; i++) { let x = rand() * s, y = rand() * s; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (rand() - 0.5) * 14; y += 4 + rand() * 8; g.lineTo(x, y); } g.stroke(); }
+});
+const texLava = canvasTex(128, (g, s) => {
+  g.fillStyle = '#f2590c'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 60; i++) { g.globalAlpha = 0.5; g.fillStyle = ['#ff8a1a', '#ffa82a', '#d93a08', '#b02405'][(rand() * 4) | 0]; g.beginPath(); g.ellipse(rand() * s, rand() * s, 3 + rand() * 10, 2 + rand() * 6, rand() * 3, 0, 7); g.fill(); }
+  for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(90,20,5,0.55)'; g.beginPath(); g.ellipse(rand() * s, rand() * s, 4 + rand() * 9, 2 + rand() * 4, rand() * 3, 0, 7); g.fill(); }
+});
+const texGriddle = canvasTex(32, (g, s) => { g.fillStyle = '#5b6170'; g.fillRect(0, 0, s, s); g.fillStyle = '#3a3f4b'; for (let x = 0; x < s; x += 8) g.fillRect(x, 0, 3, s); });
+const matBasaltTop = new THREE.MeshLambertMaterial({ map: texBasaltTop });
+const matBasaltSide = new THREE.MeshLambertMaterial({ map: texBasaltSide, emissive: 0xaa4411, emissiveMap: texBasaltSide });
+const matGriddle = new THREE.MeshLambertMaterial({ map: texGriddle });
 
 // ---------------------------------------------------------------------------
 // World: heightfield, solids, water
 // ---------------------------------------------------------------------------
 function groundHeight(x, z) {
+  if (x > 1000) return -8; // world 2: only sauce below the islands
   const r = Math.hypot(x, z);
   let h = r < 70 ? 0 : r < 84 ? -3.4 * smoothstep(70, 84, r) : -3.4;
   // gentle rolling hills (faded out near the beach)
@@ -95,6 +115,7 @@ function groundHeight(x, z) {
   return h;
 }
 function waterLevelAt(x, z) {
+  if (x > 1000) return null;
   if (Math.hypot(x - POND.x, z - POND.z) < POND.r) return POND.level;
   if (Math.hypot(x, z) > 69) return SEA;
   return null;
@@ -160,7 +181,7 @@ function worldUVBox(w, h, d, cx, cy, cz, sc = 0.25) {
 }
 function terrainBox(x0, x1, y0, y1, z0, z1, { mat = 'grass' } = {}) {
   const w = x1 - x0, h = y1 - y0, d = z1 - z0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
-  const mats = mat === 'stone' ? matStone : [matDirt, matDirt, matGrassTop, matDirt, matDirt, matDirt];
+  const mats = mat === 'stone' ? matStone : mat === 'basalt' ? [matBasaltSide, matBasaltSide, matBasaltTop, matBasaltSide, matBasaltSide, matBasaltSide] : [matDirt, matDirt, matGrassTop, matDirt, matDirt, matDirt];
   const m = new THREE.Mesh(worldUVBox(w, h, d, cx, cy, cz), mats);
   m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m);
   if (mat === 'grass') {
@@ -170,7 +191,7 @@ function terrainBox(x0, x1, y0, y1, z0, z1, { mat = 'grass' } = {}) {
   return addSolid({ x: x0, y: y0, z: z0 }, { x: x1, y: y1, z: z1 }, { mesh: m });
 }
 // Ramp: rises along axis toward dir (+1/-1) from lo to hi
-function ramp(x0, x1, z0, z1, base, lo, hi, axis, dir) {
+function ramp(x0, x1, z0, z1, base, lo, hi, axis, dir, mat = matGrassTop) {
   const shape = new THREE.Shape();
   const len = axis === 'x' ? x1 - x0 : z1 - z0, wid = axis === 'x' ? z1 - z0 : x1 - x0;
   shape.moveTo(0, base); shape.lineTo(len, base); shape.lineTo(len, hi); shape.lineTo(0, lo); shape.closePath();
@@ -185,9 +206,9 @@ function ramp(x0, x1, z0, z1, base, lo, hi, axis, dir) {
     p.setXYZ(i, x, y, z); uv.setXY(i, (x + z) * 0.25, y * 0.25 + (x - z) * 0.1);
   }
   g.computeVertexNormals();
-  const m = new THREE.Mesh(g, matGrassTop); m.castShadow = m.receiveShadow = true;
+  const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true;
   // ExtrudeGeometry may flip winding after mirroring; render both sides
-  m.material = matGrassTop.clone(); m.material.side = THREE.DoubleSide;
+  m.material = mat.clone(); m.material.side = THREE.DoubleSide;
   scene.add(m);
   return addSolid({ x: x0, y: base, z: z0 }, { x: x1, y: hi, z: z1 }, { ramp: { axis, dir, lo } });
 }
@@ -249,7 +270,7 @@ function moveBody(b, dt) {
 // ---------------------------------------------------------------------------
 const loader = new GLTFLoader();
 const models = {};
-const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones'];
+const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones', 'meat-ribs', 'whole-ham', 'sausage', 'lemon', 'pot-stew', 'frying-pan', 'bottle-ketchup'];
 const PLAT = ['tree', 'tree-pine', 'coin-gold', 'star', 'heart', 'spring', 'flag', 'platform', 'block-moving', 'block-moving-blue', 'crate', 'crate-item', 'rocks', 'fence-straight', 'flowers', 'flowers-tall', 'grass', 'hedge', 'mushrooms', 'plant', 'sign', 'stones', 'barrel', 'chest', 'pipe', 'poles'];
 function loadGLB(url) { return new Promise((res, rej) => loader.load(url, (g) => res(g.scene), undefined, rej)); }
 async function loadAll() {
@@ -356,13 +377,22 @@ const STAR_NAMES = {
   fish: 'Big Catch at Lake Lattuga',
   coins: '100 Coin Feast',
   steaks: 'Steak Roundup',
+  ham: 'Don Prosciutto of Vulcano Ragù',
+  crossing: 'Across the Sizzling Sauce',
+  skewer: 'Top of the Spiedino Spire',
+  lemons: 'Eight Sunny Lemons',
+  ribs: 'Rack of Ribs Roundup',
 };
 const STAR_ORDER = ['boss', 'tower', 'peppers', 'kids', 'fish', 'coins', 'steaks'];
+const STAR_ORDER2 = ['ham', 'crossing', 'skewer', 'lemons', 'ribs'];
+const TOTAL_STARS = STAR_ORDER.length + STAR_ORDER2.length;
+const world1Stars = () => STAR_ORDER.filter((id) => G.stars.has(id)).length;
 let saved = [];
 try { saved = JSON.parse(localStorage.getItem('pachino64') || '{}').stars || []; } catch (e) { saved = []; }
 const G = {
   mode: 'loading', stars: new Set(saved), coins: 0, lives: 4, health: 8, peppers: 0, kids: 0, fishKilled: 0, steaksKilled: 0,
-  checkpoint: SPAWN.clone(), time: 0, healthShow: 0, coinStarSpawned: false, nextLifeAt: 50, endingShown: saved.length >= 7,
+  checkpoint: SPAWN.clone(), time: 0, healthShow: 0, coinStarSpawned: false, nextLifeAt: 50, endingShown: saved.length >= TOTAL_STARS,
+  world: 1, lemons: 0, gateCool: 0, gateAnnounced: STAR_ORDER.every((id) => saved.includes(id)),
 };
 function saveGame() { try { localStorage.setItem('pachino64', JSON.stringify({ stars: [...G.stars] })); } catch (e) { /* storage blocked */ } }
 
@@ -371,7 +401,8 @@ function toast(msg, t = 2.2) { $('toast').textContent = msg; $('toast').classLis
 function banner(html, t = 2.5) { $('banner').innerHTML = html; $('banner').classList.add('show'); bannerT = t; }
 function updateHUD(dt) {
   $('stars').textContent = G.stars.size; $('coins').textContent = G.coins; $('livesN').textContent = Math.max(0, G.lives);
-  $('pepperN').textContent = G.peppers; $('peppers').style.display = G.peppers > 0 && G.peppers < 8 ? 'flex' : 'none';
+  $('pepperN').textContent = G.peppers; $('peppers').style.display = G.world === 1 && G.peppers > 0 && G.peppers < 8 ? 'flex' : 'none';
+  $('lemonN').textContent = G.lemons; $('lemons').style.display = G.world === 2 && G.lemons > 0 && G.lemons < 8 ? 'flex' : 'none';
   if (toastT > 0 && (toastT -= dt) <= 0) $('toast').classList.remove('show');
   if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').classList.remove('show');
   G.healthShow -= dt;
@@ -413,6 +444,7 @@ function coin(x, y, z) { return addItem('coin', inst('coin-gold', 2.0, false), n
 function coinLine(a, b, n) { for (let i = 0; i < n; i++) { const t = n === 1 ? 0 : i / (n - 1); coin(lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)); } }
 function coinRing(cx, y, cz, r, n) { for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; coin(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r); } }
 function pepper(x, y, z) { const m = inst('paprika', 4.5, false); addEyes(m, { hf: 0.55, size: 0.13 }); return addItem('pepper', m, new THREE.Vector3(x, y, z)); }
+function lemon(x, y, z) { const m = inst('lemon', 4.2, false); addEyes(m, { hf: 0.5, size: 0.14 }); return addItem('lemon', m, new THREE.Vector3(x, y, z)); }
 function heartPickup(x, y, z) { return addItem('heart', inst('heart', 2.6, false), new THREE.Vector3(x, y, z), { r: 1.6, spin: 0 }); }
 
 const starMeshes = {};
@@ -441,6 +473,11 @@ function collectItem(it) {
       toast(`Red Pepper ${G.peppers} / 8`);
       if (G.peppers === 8) spawnStar('peppers', new THREE.Vector3(0, 3.2, 8));
       break;
+    case 'lemon':
+      G.lemons++; sfx.redcoin(); burst(p, { n: 12, color: 0xffe14a, speed: 4, life: 0.6 }); addCoins(2);
+      toast(`Sunny Lemon ${G.lemons} / 8`);
+      if (G.lemons === 8) spawnStar('lemons', new THREE.Vector3(W2X, 4.2, 26));
+      break;
     case 'heart': break;
     case 'star': collectStar(it.id); break;
     case 'kid': break;
@@ -452,7 +489,7 @@ function updateItems(dt) {
     it.t += dt;
     const m = it.mesh;
     if (it.type === 'coin') m.rotation.y += dt * 4;
-    else if (it.type === 'pepper') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
+    else if (it.type === 'pepper' || it.type === 'lemon') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
     else if (it.type === 'star') { m.rotation.y += dt * 2.2; m.position.y = it.pos.y + Math.sin(it.t * 2) * 0.25; }
     else if (it.type === 'heart') {
       const near = player.pos.distanceTo(it.pos) < 2.2;
@@ -481,6 +518,7 @@ function breakCrate(c) {
   burst(p, { n: 14, color: 0xb07a3c, speed: 6, size: 0.3, grav: 20, life: 0.8, up: 6 });
   if (c.contents === 'coins') for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; coin(p.x + Math.cos(a) * 1.2, p.y + 0.2, p.z + Math.sin(a) * 1.2); }
   else if (c.contents === 'pepper') pepper(p.x, p.y + 0.3, p.z);
+  else if (c.contents === 'lemon') lemon(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'heart') heartPickup(p.x, p.y - 0.6, p.z);
 }
 const springs = [];
@@ -492,7 +530,8 @@ function spring(x, y, z) {
 }
 const movers = [];
 function mover(name, base, fn, s = [3, 3, 3]) {
-  const o = inst(name, 1); o.scale.set(...s); o.position.copy(base); scene.add(o);
+  const o = typeof name === 'string' ? inst(name, 1) : name; if (typeof name === 'string') o.scale.set(...s);
+  o.position.copy(base); scene.add(o);
   o.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(o);
   const off = { min: b.min.clone().sub(base), max: b.max.clone().sub(base) };
   const sd = addSolid(b.min, b.max);
@@ -573,19 +612,52 @@ function talkTo(n) {
 // Enemies: steaks, fish, King Steak
 // ---------------------------------------------------------------------------
 const enemies = [];
-function steak(x, z, { cooked = false, y = null, range = 6 } = {}) {
+const STEAK_TYPES = {
+  raw: { model: 'meat-raw', s: 3.2, speed: 4.2, r: 0.75, h: 1.8 },
+  cooked: { model: 'meat-cooked', s: 3.2, speed: 5.6, r: 0.75, h: 1.8 },
+  ribs: { model: 'meat-ribs', s: 4.4, speed: 3.6, r: 0.9, h: 1.7, armored: true },
+  sausage: { model: 'sausage', s: 5, speed: 6.6, r: 0.55, h: 1.9 },
+};
+function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 } = {}) {
+  type = type || (cooked ? 'cooked' : 'raw'); const T = STEAK_TYPES[type];
   const gy = y === null ? groundHeight(x, z) : y;
   const root = new THREE.Group(); root.position.set(x, gy, z); scene.add(root);
-  const s = 3.2;
+  const s = T.s;
   const tilt = new THREE.Group(); root.add(tilt);
-  const body = inst(cooked ? 'meat-cooked' : 'meat-raw', s); body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.05; body.position.z = -0.1;
-  tilt.add(body); addEyes(tilt, { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
+  const body = inst(T.model, s);
+  if (type === 'sausage') { body.rotation.z = Math.PI / 2; body.position.set(0.06 * s, 0.19 * s + 0.05, 0); }
+  else if (type === 'ribs') { body.rotation.x = Math.PI / 2; body.position.y = 0.19 * s + 0.05; body.position.z = -0.1; }
+  else { body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.05; body.position.z = -0.1; }
+  tilt.add(body);
+  addEyes(tilt, type === 'sausage' ? { hf: 0.74, size: 0.13, spread: 0.2, angry: true } : { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
   const e = {
-    kind: 'steak', root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
-    pos: root.position, vel: new THREE.Vector3(), r: 0.75, h: 1.8, onGround: true, alive: true, state: 'patrol', t: 0,
-    target: new THREE.Vector3(x, gy, z), speed: cooked ? 5.6 : 4.2, facing: rand() * 6, hop: 0,
+    kind: 'steak', type, w, armored: !!T.armored, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
+    pos: root.position, vel: new THREE.Vector3(), r: T.r, h: T.h, onGround: true, alive: true, state: 'patrol', t: 0,
+    target: new THREE.Vector3(x, gy, z), speed: T.speed, facing: rand() * 6, hop: 0,
   };
   enemies.push(e); return e;
+}
+// Ember fish: skeleton fish that leap out of the hot sauce in an arc. Hazard only.
+function ember(x, z, { period = 2.6, phase = 0, height = 4, dx = 0, dz = 0 } = {}) {
+  const root = new THREE.Group(); scene.add(root);
+  const body = inst('fish-bones', 3.6, false); root.add(body);
+  body.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.color = new THREE.Color(0xffb060); c.material.emissive = new THREE.Color(0xff4a00); c.material.emissiveIntensity = 0.8; } });
+  const e = { kind: 'ember', root, body, pos: root.position, alive: true, state: 'swim', t: phase, period, height, x, z, dx, dz, r: 0.9, h: 1, up: false };
+  root.position.set(x, LAVA - 2, z); enemies.push(e); return e;
+}
+function updateEmber(e, dt) {
+  e.t += dt;
+  const j = ((e.t % e.period) / e.period) / 0.6;
+  const up = j < 1;
+  if (up !== e.up) { e.up = up; if (G.world === 2) burst(new THREE.Vector3(e.pos.x, LAVA + 0.1, e.pos.z), { n: 6, color: 0xff9a2a, speed: 3, life: 0.5, grav: 15, up: 4, size: 0.2 }); }
+  if (!up) { e.root.visible = false; e.pos.set(e.x, LAVA - 2, e.z); return; }
+  e.root.visible = true;
+  e.pos.set(e.x + e.dx * j, LAVA - 0.8 + e.height * 4 * j * (1 - j), e.z + e.dz * j);
+  e.root.rotation.y = (e.dx || e.dz) ? Math.atan2(e.dx, e.dz) : e.t * 2;
+  e.body.rotation.x = -Math.cos(Math.PI * j) * ((e.dx || e.dz) ? 0.9 : 1.5);
+  if (G.mode !== 'play' || player.dead) return;
+  const d = Math.hypot(player.pos.x - e.pos.x, player.pos.z - e.pos.z), dy = player.pos.y + 0.8 - e.pos.y;
+  if (d < 1.15 && Math.abs(dy) < 1.3) hurtPlayer(1, e.pos);
 }
 function fish(i) {
   const root = new THREE.Group(); scene.add(root);
@@ -594,22 +666,31 @@ function fish(i) {
   root.position.set(POND.x + Math.cos(e.a) * e.rr, POND.level - 0.6, POND.z + Math.sin(e.a) * e.rr);
   enemies.push(e); return e;
 }
-let boss = null;
-function makeBoss(x, y, z, arena) {
+function makeBoss(x, y, z, arena, cfg = {}) {
+  const C = {
+    model: 'meat-raw', s: 8.5, name: 'King Steak', star: 'boss', hp: 3, chaseT: 2.6, stunT: 3.2, jumpEvery: 3, fast: 1, r: 2.2, crownZ: 0.2,
+    eyes: { hf: 0.66, size: 0.08, spread: 0.2 },
+    intro: ['GRRRAAH! Who dares climb MY Mount Grill?!', 'A tomato?! In a pirate hat?! I shall make you into SAUCE!', '(Tip: dodge his charge. When he is dizzy, jump on him or ground pound him!)'],
+    ...cfg,
+  };
   const root = new THREE.Group(); root.position.set(x, y, z); scene.add(root);
-  const s = 8.5; const tilt = new THREE.Group(); root.add(tilt);
-  const body = inst('meat-raw', s); body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.1; body.position.z = -0.25; tilt.add(body);
-  addEyes(tilt, { hf: 0.66, size: 0.08, spread: 0.2, angry: true });
+  const s = C.s; const tilt = new THREE.Group(); root.add(tilt);
+  const body = inst(C.model, s);
+  if (C.model === 'whole-ham') body.position.y = 0.05;
+  else { body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.1; body.position.z = -0.25; }
+  tilt.add(body);
+  root.updateWorldMatrix(true, true); const top = new THREE.Box3().setFromObject(tilt).max.y - y;
+  addEyes(tilt, { ...C.eyes, angry: true });
   // golden crown
   const crown = new THREE.Group(); const gold = new THREE.MeshStandardMaterial({ color: 0xffc928, metalness: 0.6, roughness: 0.3 });
   const band = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.5, 16, 1, true), gold); band.material.side = THREE.DoubleSide; crown.add(band);
   for (let i = 0; i < 6; i++) { const sp = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 6), gold); const a = (i / 6) * Math.PI * 2; sp.position.set(Math.cos(a) * 1.0, 0.6, Math.sin(a) * 1.0); crown.add(sp); }
-  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), new THREE.MeshStandardMaterial({ color: 0x3f8cff, metalness: 0.3, roughness: 0.2 })); gem.position.set(0, 0, 1.12); crown.add(gem);
-  crown.position.set(0, 0.58 * s * 1 + 0.35, 0.2); crown.traverse((c) => c.isMesh && (c.castShadow = true)); tilt.add(crown);
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), new THREE.MeshStandardMaterial({ color: C.gem ?? 0x3f8cff, metalness: 0.3, roughness: 0.2 })); gem.position.set(0, 0, 1.12); crown.add(gem);
+  crown.position.set(0, top + 0.3, C.crownZ); crown.traverse((c) => c.isMesh && (c.castShadow = true)); tilt.add(crown);
   const dizzy = new THREE.Group(); for (let i = 0; i < 3; i++) { const st = inst('star', 1.2, false); st.position.set(Math.cos(i * 2.1) * 1.4, 0, Math.sin(i * 2.1) * 1.4); dizzy.add(st); }
-  dizzy.position.y = 0.58 * s + 1.6; dizzy.visible = false; root.add(dizzy);
-  boss = { kind: 'boss', root, tilt, body, dizzy, pos: root.position, vel: new THREE.Vector3(), r: 2.2, h: 4.8, onGround: true, alive: true, hp: 3, state: 'sleep', t: 0, facing: 0, arena, home: new THREE.Vector3(x, y, z), cycle: 0, chargeDir: new THREE.Vector3() };
-  enemies.push(boss);
+  dizzy.position.y = top + 1.6; dizzy.visible = false; root.add(dizzy);
+  const b = { kind: 'boss', cfg: C, root, tilt, body, dizzy, pos: root.position, vel: new THREE.Vector3(), r: C.r, h: top - 0.2, onGround: true, alive: true, hp: C.hp, state: 'sleep', t: 0, facing: 0, arena, home: new THREE.Vector3(x, y, z), cycle: 0, chargeDir: new THREE.Vector3() };
+  enemies.push(b); return b;
 }
 function killEnemy(e, how = 'stomp') {
   if (!e.alive) return; e.alive = false;
@@ -617,10 +698,18 @@ function killEnemy(e, how = 'stomp') {
   burst(p, { n: 16, color: 0xffffff, speed: 5, size: 0.35, life: 0.6 });
   if (e.kind === 'steak') {
     sfx.stomp(); G.steaksKilled++; e.state = 'dead'; e.t = 0;
-    coin(e.pos.x, Math.max(e.pos.y, groundHeight(e.pos.x, e.pos.z)) + 0.6, e.pos.z);
-    const left = enemies.filter((x) => x.kind === 'steak' && x.alive).length;
-    if (left === 0) { spawnStar('steaks', new THREE.Vector3(7, 3.2, 10)); }
-    else toast(`Steaks left: ${left}`, 1.6);
+    coin(e.pos.x, Math.max(e.pos.y, e.w === 2 ? e.home.y : groundHeight(e.pos.x, e.pos.z)) + 0.6, e.pos.z);
+    if (e.w === 2) {
+      if (e.armored) {
+        const left = enemies.filter((x) => x.armored && x.alive).length;
+        if (left === 0) spawnStar('ribs', new THREE.Vector3(W2X - 7, 4.2, 12));
+        else toast(`Ribs left: ${left}`, 1.6);
+      }
+    } else {
+      const left = enemies.filter((x) => x.kind === 'steak' && x.w === 1 && x.alive).length;
+      if (left === 0) { spawnStar('steaks', new THREE.Vector3(7, 3.2, 10)); }
+      else toast(`Steaks left: ${left}`, 1.6);
+    }
   } else if (e.kind === 'fish') {
     sfx.stomp(); G.fishKilled++; e.state = 'dead'; e.t = 0;
     const bones = inst('fish-bones', 3); bones.position.copy(e.pos); scene.add(bones); e.bones = bones;
@@ -670,6 +759,7 @@ function updateSteak(e, dt) {
   e.vel.y = Math.max(e.vel.y - GRAV * dt, -MAX_FALL);
   moveBody(e, dt);
   if (e.pos.y < -20) { e.pos.copy(e.home); e.vel.set(0, 0, 0); }
+  if (e.w === 2 && e.pos.y < LAVA) { burst(e.pos.clone().setY(LAVA + 0.2), { n: 14, color: 0xff9a2a, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // sizzled in the sauce
   // waddle hop animation
   e.hop += dt * (speed > 2 ? 12 : 7);
   e.root.rotation.y = e.facing;
@@ -737,7 +827,7 @@ function updateFish(e, dt) {
 function updateBoss(b, dt) {
   if (!b.alive) {
     b.t += dt; b.root.scale.set(1 + b.t, Math.max(0.02, 1 - b.t * 1.2), 1 + b.t);
-    if (b.t > 0.9 && !b.gone) { b.gone = true; scene.remove(b.root); burst(b.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 40, color: 0xffffff, speed: 9, size: 0.6, life: 1 }); spawnStar('boss', new THREE.Vector3(b.home.x, b.home.y + 2.2, b.home.z)); }
+    if (b.t > 0.9 && !b.gone) { b.gone = true; scene.remove(b.root); burst(b.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 40, color: 0xffffff, speed: 9, size: 0.6, life: 1 }); spawnStar(b.cfg.star, new THREE.Vector3(b.home.x, b.home.y + 2.2, b.home.z)); }
     return;
   }
   b.t += dt;
@@ -752,14 +842,14 @@ function updateBoss(b, dt) {
       b.tilt.rotation.x = 0.1 + Math.sin(b.t * 1.5) * 0.05;
       if (inArena && G.mode === 'play') {
         b.state = 'intro'; b.t = 0;
-        openDialog('King Steak', ['GRRRAAH! Who dares climb MY Mount Grill?!', 'A tomato?! In a pirate hat?! I shall make you into SAUCE!', '(Tip: dodge his charge. When he is dizzy, jump on him or ground pound him!)']);
+        openDialog(b.cfg.name, b.cfg.intro);
       }
       break;
     case 'intro': if (G.mode === 'play') { b.state = 'chase'; b.t = 0; } break;
     case 'chase':
       if (!inArena) { b.state = 'home'; break; }
-      speed = 3.4 + (3 - b.hp) * 0.8; b.facing += angDiff(b.facing, toP) * Math.min(1, dt * 3);
-      if (b.t > 2.6) { b.cycle++; b.state = b.cycle % 3 === 0 ? 'jump' : 'windup'; b.t = 0; if (b.state === 'jump') { b.vel.y = 18; b.onGround = false; } }
+      speed = (3.4 + (b.cfg.hp - b.hp) * 0.8) * b.cfg.fast; b.facing += angDiff(b.facing, toP) * Math.min(1, dt * 3);
+      if (b.t > b.cfg.chaseT) { b.cycle++; b.state = b.cycle % b.cfg.jumpEvery === 0 ? 'jump' : 'windup'; b.t = 0; if (b.state === 'jump') { b.vel.y = 18; b.onGround = false; } }
       break;
     case 'windup':
       b.facing += angDiff(b.facing, toP) * Math.min(1, dt * 8);
@@ -785,7 +875,7 @@ function updateBoss(b, dt) {
     case 'land': if (b.t > 0.9) { b.state = 'chase'; b.t = 0; } break;
     case 'stunned':
       b.tilt.rotation.z = Math.sin(b.t * 6) * 0.15; b.dizzy.rotation.y += dt * 4;
-      if (b.t > 3.2) { b.state = 'chase'; b.t = 0; b.tilt.rotation.z = 0; }
+      if (b.t > b.cfg.stunT) { b.state = 'chase'; b.t = 0; b.tilt.rotation.z = 0; }
       break;
     case 'hurt':
       b.tilt.rotation.z = 0; b.root.visible = Math.floor(b.t * 20) % 2 === 0;
@@ -814,7 +904,7 @@ function updateBoss(b, dt) {
   if (d < b.r + player.r && dy > -1 && dy < b.h + 0.3) {
     const fromTop = player.vel.y < 0 && dy > b.h * 0.6;
     if (fromTop || player.action === 'gpFall') {
-      if (b.state === 'stunned') hitBoss();
+      if (b.state === 'stunned') hitBoss(b);
       else { toast('Too tough! Make him dizzy first!', 1.5); sfx.hit(); }
       player.bounce(14); const a = Math.atan2(dx, dz); player.vel.x = Math.sin(a) * 9; player.vel.z = Math.cos(a) * 9;
     } else if (b.state === 'stunned') {
@@ -822,10 +912,10 @@ function updateBoss(b, dt) {
     } else hurtPlayer(2, b.pos);
   }
 }
-function hitBoss() {
+function hitBoss(boss) {
   boss.hp--; boss.state = 'hurt'; boss.t = 0; sfx.bossHit(); shake = 0.4;
   burst(boss.pos.clone().add(new THREE.Vector3(0, 3, 0)), { n: 20, color: 0xff6644, speed: 7, life: 0.7 });
-  toast(boss.hp > 0 ? ['', 'One more hit!', 'Ouch! Again!'][boss.hp] : 'NOOOO! My crown!', 1.6);
+  toast(boss.hp > 1 ? 'Ouch! Again!' : boss.hp === 1 ? 'One more hit!' : 'NOOOO! My crown!', 1.6);
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,7 +1093,14 @@ function updatePlayer(dt) {
   // fell into the void
   if (p.pos.y < -25) { hurtPlayer(2, p.pos); p.pos.copy(p.lastSafe).add(new THREE.Vector3(0, 2, 0)); p.vel.set(0, 0, 0); }
   // keep in world bounds (sea)
-  const rr = Math.hypot(p.pos.x, p.pos.z); if (rr > 100) { p.pos.x *= 100 / rr; p.pos.z *= 100 / rr; }
+  const wcx = G.world === 2 ? W2X : 0, wR = G.world === 2 ? 92 : 100;
+  const rr = Math.hypot(p.pos.x - wcx, p.pos.z); if (rr > wR) { p.pos.x = wcx + (p.pos.x - wcx) * wR / rr; p.pos.z *= wR / rr; }
+  // hot sauce: ouch, and a big bounce so you can steer back to land
+  if (G.world === 2 && p.pos.y < LAVA + 0.1 && G.mode === 'play') {
+    p.pos.y = LAVA + 0.1; p.bounce(19); p.jumpKind = 0; sfx.splash();
+    burst(p.pos.clone(), { n: 12, color: 0xff9a2a, speed: 5, life: 0.6, grav: 15, up: 6 });
+    if (p.invuln <= 0) { setHealth(G.health - 1); sfx.hurt(); p.invuln = 1.0; if (G.health <= 0) killPlayer(); }
+  }
   // checkpoints
   for (const f of flags) if (!f.on && p.pos.distanceTo(f.pos) < 2.5) {
     f.on = true; G.checkpoint.copy(f.pos).add(new THREE.Vector3(1.5, 0.2, 0)); sfx.redcoin(); toast('Checkpoint!', 1.4);
@@ -1027,7 +1124,12 @@ function slashHits() {
     const reach = (e.kind === 'boss' ? e.r + 2 : 2.6);
     if (d > reach || dy > 2 || dy < -(e.h || 1.5)) continue;
     if (!spin && d > 0.8 && (dx * fx + dz * fz) / d < 0.2) continue;
-    if (e.kind === 'boss') { if (e.state === 'stunned') hitBoss(); else { sfx.hit(); toast('Too tough! Make him dizzy first!', 1.5); } }
+    if (e.kind === 'boss') { if (e.state === 'stunned') hitBoss(e); else { sfx.hit(); toast('Too tough! Make him dizzy first!', 1.5); } }
+    else if (e.armored) { // swords bounce off the bones
+      sfx.hit(); toast('Clang! Too bony for a sword — stomp it!', 1.6);
+      e.state = 'knock'; e.t = 0; e.onGround = false; e.vel.set(dx / (d || 1) * 8, 6.5, dz / (d || 1) * 8);
+      burst(e.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 6, color: 0xffffff, speed: 4, life: 0.3 });
+    }
     else killEnemy(e, 'slash');
   }
   for (const c of crates) {
@@ -1068,7 +1170,7 @@ function animatePlayer(dt) {
   slashFx.rotation.z = st * 9 - 0.6;
   // blob shadow
   const f = floorAt(p.pos.x, p.pos.z, p.pos.y + 0.1, 0.3); const wl = waterLevelAt(p.pos.x, p.pos.z);
-  const fy = Math.max(f.y, wl ?? -99); const hgt = p.pos.y - fy;
+  const fy = Math.max(f.y, wl ?? -99, lavaAt(p.pos.x) ?? -99); const hgt = p.pos.y - fy;
   blob.position.set(p.pos.x, fy + 0.04, p.pos.z); blob.scale.setScalar(clamp(1 - hgt * 0.05, 0.4, 1)); blob.visible = hgt < 30;
 }
 
@@ -1154,7 +1256,7 @@ function buildLevel() {
     return ['Oh, Capitano! Mamma mia, what a disaster!', 'My five little cherry tomatoes ran off to play and the steaks scared them away!', 'Please find them! Just touch them and they will roll right back home to me.'];
   }, { eyes: { hf: 0.6, size: 0.1 } });
   npc('cauliflower', 'Signor Cavolfiore', 8, 14, 5, () => {
-    const left = enemies.filter((x) => x.kind === 'steak' && x.alive).length;
+    const left = enemies.filter((x) => x.kind === 'steak' && x.w === 1 && x.alive).length;
     if (left === 0) return ['Not a single steak left in the garden! You did it!'];
     return ['Those raw steaks keep trampling my flowerbeds!', `There are ${left} of them roaming around — in the village, on Mount Grill and near the crates.`, 'Stomp them or give them a taste of your sword! Get them all and I will give you a reward.'];
   }, { eyes: { hf: 0.55 } });
@@ -1184,7 +1286,8 @@ function buildLevel() {
     'Use WASD or a stick to run, Space to jump. Jump again right as you land to go higher — three times for a triple jump!',
     'Shift crouches. In the air it does a mighty ground pound — great for breaking crates and squashing steaks.',
     'Run, crouch and jump for a long jump. Crouch and jump while standing for a backflip. J or Click swings your sword!',
-    `Talk to every vegetable you meet — they all need your help. You have ${G.stars.size} of 7 stars. Coraggio!`,
+    world1Stars() >= 7 ? 'The 7 Golden Stars are home — and the old Star Gate on the beach behind you is awake! It leads to Isola Brace, the Ember Isle.'
+      : `Talk to every vegetable you meet — they all need your help. You have ${world1Stars()} of 7 stars. Coraggio!`,
   ], { eyes: { hf: 0.62 } });
 
   // --- Lake Lattuga (east) ---
@@ -1211,7 +1314,7 @@ function buildLevel() {
   cr.forEach(([x, z], i) => crate(x, z, i === 4 ? 'pepper' : i === 8 ? 'heart' : 'coins'));
   crate(41, 38, 'pepper'); crate(41, 38, 'coins', groundHeight(41, 38) + 1.4);
   steak(28, 31, { cooked: true, range: 5 }); steak(44, 44, { range: 5 });
-  kidAt(44, 50, 0);
+  kidAt(44, groundHeight(44, 50), 50);
   npc('pumpkin', 'Zia Zucca', 25, 47, 5, [
     'Hello, dear! These crates washed up from a shipwreck. Who knows what is inside?',
     'Ground pound them — jump, then press Shift in the air — or slash them with your sword!',
@@ -1231,7 +1334,7 @@ function buildLevel() {
   heartPickup(10, 0.5, -16);
 
   // trees & decor scattered (avoid play zones)
-  const zones = [[-25, 25, -62, -8], [-56, -34, -12, 12], [-16, 16, 0, 36], [POND.x - 17, POND.x + 17, POND.z - 17, POND.z + 17], [24, 48, 28, 52], [-8, 8, 36, 60], [-26, -12, 4, 14]];
+  const zones = [[-25, 25, -62, -8], [-56, -34, -12, 12], [-16, 16, 0, 36], [POND.x - 17, POND.x + 17, POND.z - 17, POND.z + 17], [24, 48, 28, 52], [-8, 8, 36, 70], [-26, -12, 4, 14]];
   const blocked = (x, z) => zones.some(([a, b, c, d]) => x > a && x < b && z > c && z < d);
   let placed = 0;
   for (let tries = 0; tries < 400 && placed < 46; tries++) {
@@ -1247,6 +1350,7 @@ function buildLevel() {
     if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 1) continue;
     const t = ['grass', 'grass', 'flowers', 'mushrooms', 'plant', 'stones'][(rand() * 6) | 0];
     if (x > -22 && x < 22 && z > -58 && z < -22) continue;
+    if (Math.abs(x) < 5 && z > 56 && z < 68) continue;
     place(t, x, groundHeight(x, z), z, { s: 2.2, r: rand() * 6 });
   }
   // clouds
@@ -1256,9 +1360,205 @@ function buildLevel() {
     for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.IcosahedronGeometry(3 + rand() * 3, 0), cloudMat); s.position.set(k * 3.5 - 5, rand() * 1.5, rand() * 2); s.scale.y = 0.6; g.add(s); }
     g.position.set(Math.cos(a) * r, 34 + rand() * 25, Math.sin(a) * r); g.userData.v = 0.5 + rand(); scene.add(g); clouds.push(g);
   }
-  // ghost stars for already collected missions that are always available
+  makeGate(0, groundHeight(0, 63), 63, 2, 7);
   G.coinStarSpawned = false;
 }
+
+// ---------------------------------------------------------------------------
+// Star Gates & world switching
+// ---------------------------------------------------------------------------
+const gates = [];
+const gateGold = new THREE.MeshStandardMaterial({ color: 0xffc928, metalness: 0.6, roughness: 0.3, emissive: 0x553300 });
+const gateStone = new THREE.MeshLambertMaterial({ color: 0x8a8590 });
+const gemOn = new THREE.MeshBasicMaterial({ color: 0xffe066 }), gemOff = new THREE.MeshLambertMaterial({ color: 0x4a4658 });
+const texSwirl = canvasTex(128, (g, s) => {
+  g.fillStyle = '#000'; g.fillRect(0, 0, s, s); g.lineCap = 'round';
+  const gr = g.createRadialGradient(s / 2, s / 2, 2, s / 2, s / 2, s / 2); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.25, '#3a6cff'); gr.addColorStop(1, '#000');
+  g.fillStyle = gr; g.fillRect(0, 0, s, s);
+  for (let arm = 0; arm < 5; arm++) {
+    g.strokeStyle = ['#7fd8ff', '#ffe066', '#ffffff', '#b58cff', '#7fd8ff'][arm]; g.lineWidth = 4; g.beginPath();
+    for (let r = 4; r < 62; r += 2) { const a = arm * Math.PI * 0.4 + r * 0.085; const x = s / 2 + Math.cos(a) * r, y = s / 2 + Math.sin(a) * r; if (r === 4) g.moveTo(x, y); else g.lineTo(x, y); }
+    g.stroke();
+  }
+}, false);
+function makeGate(x, y, z, to, needs) {
+  const root = new THREE.Group(); root.position.set(x, y, z); scene.add(root);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.32, 10, 40), gateStone); ring.position.y = 2.2; ring.castShadow = true; root.add(ring);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(2.15, 40), new THREE.MeshBasicMaterial({ map: texSwirl, transparent: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+  disc.position.y = 2.2; root.add(disc);
+  for (const sx of [-1, 1]) { const f = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.0, 1.3), matStone); f.position.set(sx * 2.1, 0.3, 0); f.castShadow = f.receiveShadow = true; root.add(f); }
+  const sockets = [];
+  for (let i = 0; i < needs; i++) {
+    const a = lerp(2.75, 0.39, i / Math.max(1, needs - 1));
+    const gm = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), gemOff); gm.scale.z = 2; gm.position.set(Math.cos(a) * 2.3, 2.2 + Math.sin(a) * 2.3, 0); root.add(gm); sockets.push(gm);
+  }
+  const g = { root, ring, disc, sockets, pos: root.position, to, needs, hintT: 0, open: false }; gates.push(g); return g;
+}
+function updateGates(dt) {
+  const n1 = world1Stars(); G.gateCool -= dt;
+  for (const g of gates) {
+    const open = n1 >= g.needs; g.open = open;
+    g.disc.visible = open; g.disc.rotation.z -= dt * 1.6; g.ring.material = open ? gateGold : gateStone;
+    g.sockets.forEach((m, i) => { m.material = i < n1 ? gemOn : gemOff; m.rotation.z += dt * (i < n1 ? 2 : 0); });
+    if (G.mode !== 'play') continue;
+    const d = Math.hypot(player.pos.x - g.pos.x, player.pos.z - g.pos.z), dy = player.pos.y - g.pos.y;
+    if (d > 6 || dy < -1 || dy > 4.5) continue;
+    if (open) {
+      if (Math.random() < dt * 10) burst(new THREE.Vector3(g.pos.x + (Math.random() - 0.5) * 3.4, g.pos.y + 0.6 + Math.random() * 3.4, g.pos.z), { n: 1, color: 0x9fd8ff, speed: 0.8, size: 0.14, life: 0.8, up: 1 });
+      if (d < 1.5 && G.gateCool <= 0) travel(g.to);
+    } else if ((g.hintT -= dt) <= 0) { g.hintT = 5; toast(`The Star Gate sleeps… ${n1} / ${g.needs} Golden Stars`, 2.6); }
+  }
+}
+const ENV = {
+  1: { top: 0x3a8cf0, bottom: 0xcfe9ff, fogN: 90, fogF: 300, sky: 0xeaf6ff, gnd: 0x5d7a3a, hemiI: 1.6, sun: 0xfff2dd, sunI: 2.4 },
+  2: { top: 0x2a1446, bottom: 0xff9a55, fogN: 60, fogF: 250, sky: 0xffc9a0, gnd: 0x7a3010, hemiI: 1.5, sun: 0xffb880, sunI: 2.1 },
+};
+function setEnv(w) {
+  const e = ENV[w], u = scene.userData.sky.material.uniforms;
+  u.top.value.set(e.top); u.bottom.value.set(e.bottom); scene.fog.color.set(e.bottom); scene.fog.near = e.fogN; scene.fog.far = e.fogF;
+  hemi.color.set(e.sky); hemi.groundColor.set(e.gnd); hemi.intensity = e.hemiI; sun.color.set(e.sun); sun.intensity = e.sunI;
+  setMusicMood(w);
+}
+const ARRIVE = { 1: new THREE.Vector3(0, 0.2, 49), 2: new THREE.Vector3(W2X, 1.2, 45) };
+function travel(to) {
+  if (G.mode !== 'play') return;
+  G.mode = 'travel'; G.travelT = 0; G.travelTo = to; G.travelDone = false; sfx.appear(); $('fade').classList.add('on');
+}
+function arriveWorld(w) {
+  const p = player; G.world = w; p.pos.copy(ARRIVE[w]); p.vel.set(0, 0, 0); p.facing = Math.PI; p.action = 'normal'; p.onGround = false;
+  p.lastSafe.copy(p.pos); G.checkpoint.copy(ARRIVE[w]); G.gateCool = 1.5;
+  camState.yaw = 0; camState.pitch = 0.36; camState.snap = true; setEnv(w); animatePlayer(0.016);
+}
+
+// ---------------------------------------------------------------------------
+// World 2: Isola Brace, the Ember Isle
+// ---------------------------------------------------------------------------
+function buildWorld2() {
+  const X = W2X, B = { mat: 'basalt' }, S = { mat: 'stone' };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const w2 = (type, range = 4) => ({ type, w: 2, range });
+  // sea of hot sauce + far-away rock spires
+  texLava.repeat.set(44, 44);
+  const lava = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshBasicMaterial({ map: texLava }));
+  lava.rotation.x = -Math.PI / 2; lava.position.set(X, LAVA, 0); scene.add(lava);
+  const spireMat = new THREE.MeshLambertMaterial({ color: 0x3a2b30, flatShading: true });
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + rand() * 0.3, r = 108 + rand() * 50, h = 16 + rand() * 34;
+    const m = new THREE.Mesh(new THREE.ConeGeometry(5 + rand() * 9, h, 6), spireMat); m.position.set(X + Math.cos(a) * r, LAVA + h / 2 - 1, Math.sin(a) * r); scene.add(m);
+  }
+  // griddle plates (moving) and stone ledges (static)
+  const slab = (cx, top, cz, fn, w = 3, d = 3) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, d), matGriddle); m.castShadow = m.receiveShadow = true;
+    mover(m, V(X + cx, top - 0.3, cz), fn);
+  };
+  const ledge = (cx, top, cz) => terrainBox(X + cx - 1.5, X + cx + 1.5, top - 0.5, top, cz - 1.5, cz + 1.5, S);
+
+  // --- Arrival dock (south) ---
+  terrainBox(X - 8, X + 8, -4, 1, 40, 62, B);
+  makeGate(X, 1, 59.5, 1, 0);
+  place('barrel', X - 6, 1, 42, { s: 2.4, solid: true }); place('rocks', X + 6.3, 1, 60, { s: 2.5, solid: true, shrink: 0.3 }); place('sign', X + 3, 1, 41, { s: 2.5 });
+  lemon(X - 6, 2.2, 60);
+  npc('radish', 'Ravanello the Scout', X + 5, 44.5, 4, [
+    'Capitano! You came through the Star Gate! Welcome to Isola Brace, the Ember Isle.',
+    'Don Prosciutto and his meaty gang grabbed 5 Golden Stars and turned our island into one big barbecue!',
+    'Careful: the sea here is boiling hot sauce. Fall in and you will bounce right out with a burnt bottom!',
+    'The gate behind you leads back to the Garden Isle whenever you like.',
+  ], { y: 1, eyes: { hf: 0.55 } });
+  // bridge with leaping ember fish
+  terrainBox(X - 2, X + 2, -4, 1, 30, 40, S);
+  coinLine([X, 1.7, 39], [X, 1.7, 31], 5);
+  ember(X - 4.5, 33, { dx: 9, height: 3.6, period: 2.6 }); ember(X + 4.5, 37, { dx: -9, height: 3.6, period: 2.6, phase: 1.3 });
+
+  // --- Piazza Brace (centre) ---
+  terrainBox(X - 20, X + 20, -4, 1, 2, 30, B);
+  place('pot-stew', X, 1, 16, { s: 7, solid: true, shrink: 0.35 }); lemon(X, 4.1, 16);
+  place('bottle-ketchup', X - 17, 1, 5.5, { s: 3, solid: true, shrink: 0.2 });
+  place('frying-pan', X + 15, 1, 7, { s: 5, r: 0.5 });
+  place('rocks', X - 18, 1, 19, { s: 2.5, solid: true, shrink: 0.3 }); place('stones', X + 8, 1, 4, { s: 2.4 }); place('stones', X - 9, 1, 21, { s: 2.4 });
+  checkpoint(X - 3.5, 1, 28);
+  coinRing(X, 1.8, 16, 5.5, 8); coinLine([X - 16, 1.7, 12], [X - 8, 1.7, 4], 5); coinLine([X + 8, 1.7, 12], [X + 16, 1.7, 12], 5);
+  crate(X + 11.2, 26.5, 'heart', 1); crate(X + 14, 26.5, 'coins', 1); crate(X + 16.8, 26.5, 'lemon', 1);
+  heartPickup(X - 16, 1.5, 27);
+  steak(X - 10, 13, { y: 1, ...w2('ribs', 5) }); steak(X + 10, 16, { y: 1, ...w2('ribs', 5) }); steak(X + 2, 6, { y: 1, ...w2('ribs', 4) });
+  steak(X - 15, 8, { y: 1, ...w2('sausage', 4) }); steak(X + 16, 20, { y: 1, ...w2('sausage', 4) });
+  npc('onion', 'Cipollina', X - 5.5, 26.5, 8, () => {
+    const left = enemies.filter((x) => x.armored && x.alive).length;
+    if (left === 0) return ['*sniff* No more ribs! These are tears of joy, Capitano!'];
+    return ['*sniff* It is not the onions, it is the smoke… *sniff*', 'Racks of ribs are stomping all over the isle. They are so bony that a sword just goes CLANG!',
+      `Jump on them, ground pound them — or knock them into the sauce. ${left} of them are left.`];
+  }, { y: 1, eyes: { hf: 0.5 } });
+  npc('beet', 'Barbabietola', X + 5.5, 26.5, 10, () => G.stars.has('lemons') && G.lemons >= 8 ? ['Lemonade for everybody! Nothing cools a volcano better.'] : [
+    'Phew, it is HOT here. I would give anything for a glass of lemonade!',
+    `Eight Sunny Lemons are hidden around the isle — you have ${G.lemons} of 8. Look in crates, on high places and far corners.`,
+    'Bring them all and a Golden Star will appear right here in the piazza!',
+  ], { y: 1, eyes: { hf: 0.5 } });
+
+  // --- stepping across to Vulcano Ragù (north) ---
+  terrainBox(X - 1.5, X + 1.5, -4, 1.2, -2, 0, S); lemon(X, 2.4, -1);
+  slab(0, 1.3, -4.5, (t) => V(Math.sin(t * 0.9) * 3, 0, 0));
+  ember(X - 4.5, 1, { dx: 9, height: 3.4, period: 3, phase: 0.5 });
+  terrainBox(X - 18, X + 18, -4, 2, -46, -8, B);          // foot
+  ramp(X - 3, X + 3, -18, -10, 2, 2, 6, 'z', -1, matBasaltTop);
+  terrainBox(X - 13, X + 13, 2, 6, -44, -18, B);          // tier 2
+  terrainBox(X - 8, X + 8, 6, 10, -42, -24, B);           // summit
+  checkpoint(X + 6, 2, -9.5);
+  npc('broccoli', 'Broccoletta', X - 6.5, -10.5, 4, () => G.stars.has('ham') ? ['Vulcano Ragù is ours again. Grazie, Capitano!'] : [
+    'Don Prosciutto sits on the very top of Vulcano Ragù.',
+    'Take the ramp, then use the spring on the west side — or the griddle lift on the east side.',
+    'He is faster than King Steak and needs FOUR bonks. Wait until he crashes and sees stars!',
+  ], { y: 2, eyes: { hf: 0.62 } });
+  steak(X + 15.5, -28, { y: 2, ...w2('ribs', 3) }); steak(X - 15.5, -30, { y: 2, ...w2('sausage', 3) });
+  coinLine([X + 15.5, 2.7, -14], [X + 15.5, 2.7, -40], 7); lemon(X, 3.2, -45);
+  steak(X + 8, -21, { y: 6, ...w2('ribs', 3) });
+  spring(X - 10.5, 6, -33);
+  slab(10.5, 8.1, -33, (t) => V(0, Math.sin(t * 1.1) * 2, 0)); lemon(X + 10.5, 11.3, -33);
+  heartPickup(X + 11, 6.5, -21); checkpoint(X - 6, 6, -20.5);
+  coinLine([X - 11, 6.7, -22], [X - 11, 6.7, -29], 4); coinLine([X - 10, 6.7, -43], [X + 10, 6.7, -43], 6);
+  place('poles', X - 7, 10, -41, { s: 2 }); place('poles', X + 7, 10, -41, { s: 2 });
+  coinRing(X, 10.8, -33, 5.5, 8);
+  makeBoss(X, 10, -35, { x0: X - 8, x1: X + 8, z0: -42, z1: -24, y: 10 }, {
+    model: 'whole-ham', s: 8, name: 'Don Prosciutto', star: 'ham', hp: 4, chaseT: 2.1, stunT: 2.7, jumpEvery: 2, fast: 1.2, r: 2.3, crownZ: 0.8, gem: 0xff3355,
+    eyes: { hf: 0.6, size: 0.11, spread: 0.2 },
+    intro: ['MAMMA MIA! A cherry tomato in a pirate hat climbs MY volcano?!', 'I am Don Prosciutto, the saltiest ham of the seven seas! Into the ragù with you!', '(Tip: same trick as King Steak — but he is faster and needs four hits.)'],
+  });
+
+  // --- the Sizzling Sauce crossing (east) ---
+  terrainBox(X + 23, X + 27, -4, 1, 14, 18, S); coin(X + 25, 1.7, 16);
+  ember(X + 28, 16, { height: 4.5, period: 2.2 });
+  slab(30.5, 1.1, 16, (t) => V(0, 0, Math.sin(t) * 3));
+  terrainBox(X + 34, X + 37.5, -4, 1, 14, 18, S); lemon(X + 35.75, 2.2, 16);
+  slab(41, 1.1, 16, (t) => V(Math.sin(t * 0.8) * 1.5, 0, 0));
+  ember(X + 45, 16, { height: 4.5, period: 2.6, phase: 1 });
+  terrainBox(X + 46, X + 56, -4, 1, 10, 22, B);
+  checkpoint(X + 47.5, 1, 20.5); heartPickup(X + 48, 1.5, 12);
+  terrainBox(X + 50, X + 53, 1, 2.6, 15, 18, S);
+  spawnStar('crossing', V(X + 51.5, 3.4, 16.5), { silent: true });
+  npc('mushroom', 'Funghetto', X + 54, 12, 14, ['You crossed the Sizzling Sauce! I have been stuck out here for days.', 'Those ember fish are only bones — you cannot bop them, so just dodge them.', 'The star on that stone is all yours, Capitano!'], { y: 1, eyes: { hf: 0.45 } });
+
+  // --- Spiedino Spire (west) ---
+  slab(-23, 1.1, 16, (t) => V(Math.sin(t * 0.8) * 1.2, 0, 0));
+  ember(X - 23, 20.5, { dz: -9, height: 3.4, period: 2.8 });
+  terrainBox(X - 44, X - 26, -4, 1, 6, 26, B);
+  const PC = { x: -34, z: 16 };
+  terrainBox(X + PC.x - 2, X + PC.x + 2, 1, 15.4, PC.z - 2, PC.z + 2, S);
+  ledge(PC.x, 2.5, PC.z + 3.5); coin(X + PC.x, 3.3, PC.z + 3.5);
+  slab(PC.x, 4.0, PC.z, (t) => V(Math.cos(t * 0.55) * 7.5, 0, Math.sin(t * 0.55) * 7.5));
+  ledge(PC.x, 5.5, PC.z - 3.5); coin(X + PC.x, 6.3, PC.z - 3.5);
+  slab(PC.x, 7.0, PC.z, (t) => V(Math.cos(2 - t * 0.5) * 7.5, 0, Math.sin(2 - t * 0.5) * 7.5));
+  ledge(PC.x + 3.5, 8.5, PC.z); lemon(X + PC.x + 3.5, 9.7, PC.z);
+  slab(PC.x + 3.5, 11.85, PC.z + 4, (t) => V(0, Math.sin(t * 0.9) * 2.25, 0));
+  ledge(PC.x, 13.9, PC.z + 3.5); coin(X + PC.x, 14.7, PC.z + 3.5);
+  spawnStar('skewer', V(X + PC.x, 16.3, PC.z), { silent: true });
+  checkpoint(X - 28.5, 1, 22.5);
+  steak(X - 40, 10, { y: 1, ...w2('ribs', 4) });
+  coinLine([X - 42, 1.7, 8], [X - 42, 1.7, 24], 6);
+  npc('cabbage', 'Donna Verza', X - 40, 22, 6.5, () => G.stars.has('skewer') ? ['You climbed the whole Spiedino Spire! My leaves are trembling.'] : [
+    'This is the Spiedino Spire. A Golden Star is stuck on its very top!',
+    'Hop from the stone ledges onto the griddle plates that circle the spire.',
+    'High up on the east side a lift carries you the rest of the way. Buona fortuna!',
+  ], { y: 1, eyes: { hf: 0.5 } });
+}
+
 const clouds = [];
 function kidAt(x, y, z) {
   const root = new THREE.Group(); root.position.set(x, y, z); scene.add(root);
@@ -1310,7 +1610,7 @@ function updateCamera(dt) {
   }
   c.curDist = c.snap ? dist : lerp(c.curDist ?? dist, dist, Math.min(1, dt * (dist < (c.curDist ?? dist) ? 12 : 3)));
   const want = c.target.clone().addScaledVector(off, c.curDist);
-  const wl = waterLevelAt(want.x, want.z); if (wl !== null && want.y < wl + 0.4) want.y = wl + 0.4;
+  const wl = waterLevelAt(want.x, want.z) ?? lavaAt(want.x); if (wl !== null && want.y < wl + 0.4) want.y = wl + 0.4;
   c.pos.copy(want); c.snap = false;
   camera.position.copy(c.pos);
   if (shake > 0) { shake -= dt; camera.position.x += (rand() - 0.5) * shake; camera.position.y += (rand() - 0.5) * shake; }
@@ -1444,12 +1744,14 @@ function pollInput() {
 // ---------------------------------------------------------------------------
 function startGame() {
   $('title').style.display = 'none'; document.body.classList.add('playing'); G.mode = 'play'; initAudio(); startMusic(); camState.snap = true;
-  toast('Talk to Nonno Broccolo!', 3);
+  toast(world1Stars() >= 7 ? 'The Star Gate on the beach is open!' : 'Talk to Nonno Broccolo!', 3);
 }
 function togglePause() {
   if (G.mode === 'play') {
     G.mode = 'pause'; sfx.pause(); document.exitPointerLock?.();
-    $('starlist').innerHTML = STAR_ORDER.map((id) => `<li class="${G.stars.has(id) ? 'got' : 'no'}">${G.stars.has(id) ? '★' : '☆'} ${STAR_NAMES[id]}</li>`).join('');
+    const li = (id) => `<li class="${G.stars.has(id) ? 'got' : 'no'}">${G.stars.has(id) ? '★' : '☆'} ${STAR_NAMES[id]}</li>`;
+    $('starlist').innerHTML = '<li class="hd">Garden Isle</li>' + STAR_ORDER.map(li).join('')
+      + (world1Stars() >= 7 ? '<li class="hd">Isola Brace</li>' + STAR_ORDER2.map(li).join('') : '<li class="no">☆ ??? — collect all 7 to wake the Star Gate</li>');
     $('pause').style.display = 'flex';
   } else if (G.mode === 'pause') { G.mode = 'play'; $('pause').style.display = 'none'; sfx.pause(); }
 }
@@ -1486,7 +1788,7 @@ function frame() {
         if (G.mode === 'play' || G.mode === 'starget') updatePlayer(STEP_DT);
         for (const e of enemies) {
           if (e.gone) continue;
-          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else updateBoss(e, STEP_DT);
+          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else if (e.kind === 'ember') updateEmber(e, STEP_DT); else updateBoss(e, STEP_DT);
         }
       }
       if (healQueue > 0) { G.healT = (G.healT || 0) - dt; if (G.healT <= 0) { G.healT = 0.12; healQueue--; if (G.health < 8) setHealth(G.health + 1); } }
@@ -1496,21 +1798,35 @@ function frame() {
       G.starT += dt;
       if (G.starT > 2.8) {
         G.mode = 'play'; startAction('normal');
-        if (G.stars.size >= 7 && !G.endingShown) { G.endingShown = true; G.mode = 'ending'; $('ending').style.display = 'flex'; document.exitPointerLock?.(); }
+        if (G.stars.size >= TOTAL_STARS && !G.endingShown) { G.endingShown = true; G.mode = 'ending'; $('ending').style.display = 'flex'; document.exitPointerLock?.(); }
+        else if (world1Stars() >= 7 && !G.gateAnnounced) {
+          G.gateAnnounced = true; sfx.appear();
+          openDialog('The Star Gate', ['The 7 Golden Stars shine together… and something rumbles down by the beach!', 'The old Star Gate, just south of where you landed, has woken up.', 'Step through it to reach Isola Brace, the Ember Isle — 5 more Golden Stars are waiting there!']);
+        }
       }
+    }
+    if (G.mode === 'travel') {
+      G.travelT += dt;
+      if (!G.travelDone && G.travelT > 0.5) { G.travelDone = true; arriveWorld(G.travelTo); $('fade').classList.remove('on'); }
+      if (G.travelT > 1.0) { G.mode = 'play'; banner(G.world === 2 ? 'ISOLA BRACE<small>The Ember Isle — mind the hot sauce!</small>' : 'GARDEN ISLE<small>Home sweet home</small>', 3); }
     }
     if (G.mode === 'dying') {
       G.dieT += dt; animatePlayer(dt);
       $('fade').classList.toggle('on', G.dieT > 1.4);
       if (G.dieT > 2) { $('fade').classList.remove('on'); respawn(); }
     }
-    updateItems(dt); updateParticles(dt); updateRings(dt); updateNPCs(dt); updateKids(dt);
+    updateItems(dt); updateParticles(dt); updateRings(dt); updateNPCs(dt); updateKids(dt); updateGates(dt);
+    if (G.world === 2 && sim && Math.random() < dt * 7) { // sparks drifting up from the sauce
+      const sx = player.pos.x + (Math.random() - 0.5) * 50, sz = player.pos.z + (Math.random() - 0.5) * 50;
+      if (floorAt(sx, sz, 50, 0.3).y < LAVA) burst(new THREE.Vector3(sx, LAVA + 0.1, sz), { n: 1, color: 0xffb040, speed: 0.6, size: 0.16, life: 2.4, grav: -4, up: 1.5 });
+    }
     for (const s of springs) { s.t = Math.max(0, s.t - dt); s.o.scale.y = 2.6 * (1 - Math.sin(s.t / 0.4 * Math.PI) * 0.4); }
     for (const f of flags) if (f.on) f.o.rotation.y = Math.sin(G.time * 2) * 0.2;
     if (G.mode !== 'pause') updateCamera(dt);
     updateHUD(dt);
   }
   for (const c of clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 160) c.position.x = -160; }
+  texLava.offset.x = G.time * 0.012; texLava.offset.y = Math.sin(G.time * 0.4) * 0.03;
   texWater.offset.x = G.time * 0.01; texWater.offset.y = Math.sin(G.time * 0.5) * 0.01;
   // sun follows the player so shadows stay crisp
   sun.position.set(player.pos.x + 30, player.pos.y + 60, player.pos.z + 20); sun.target.position.copy(player.pos);
@@ -1523,9 +1839,9 @@ function frame() {
 // ---------------------------------------------------------------------------
 (async () => {
   try { await loadAll(); } catch (e) { $('loading').textContent = 'Failed to load models: ' + e.message; throw e; }
-  setupPlayerModel(); buildLevel(); drawHealth();
+  setupPlayerModel(); buildLevel(); buildWorld2(); drawHealth();
   // already-collected stars from a previous session: re-spawn as ghost stars only where they are fixed
   $('loading').style.display = 'none'; $('title').style.display = 'flex'; G.mode = 'title';
-  window.__game = { G, player, enemies, items, solids, camState, input };
+  window.__game = { G, player, enemies, items, solids, camState, input, travel, gates };
   frame();
 })();

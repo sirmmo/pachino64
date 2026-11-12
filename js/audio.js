@@ -1,6 +1,9 @@
 // Tiny WebAudio synth: sound effects + a looping chiptune. No external files.
 let ctx = null, master = null, musicGain = null, sfxGain = null;
-let muted = false, musicTimer = null, nextNoteTime = 0, step = 0;
+let muted = false, musicTimer = null, nextNoteTime = 0, step = 0, mood = 1;
+// mood 2 = the same tune in a minor key, a bit slower and grittier (world 2)
+export function setMusicMood(m) { mood = m; }
+const minor = (n) => { const pc = n % 12; return pc === 4 || pc === 9 || pc === 11 ? n - 1 : n; };
 
 export function initAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
@@ -84,15 +87,15 @@ const bass = [48, 55, 52, 55, 50, 57, 53, 57, 52, 55, 48, 52, 43, 50, 47, 50];
 
 function scheduleMusic() {
   if (!ctx) return;
-  const spb = 60 / 132 / 4; // 16th notes at 132 bpm
+  const spb = 60 / (mood === 2 ? 118 : 132) / 4; // 16th notes
   while (nextNoteTime < ctx.currentTime + 0.2) {
     const s = step % 64;
     const ln = lead[s];
     const dt = nextNoteTime - ctx.currentTime;
-    if (ln !== null) tone(N(ln), spb * 1.8, { type: 'square', vol: 0.12, dest: musicGain, delay: dt });
+    if (ln !== null) tone(N(mood === 2 ? minor(ln) : ln), spb * 1.8, { type: mood === 2 ? 'sawtooth' : 'square', vol: mood === 2 ? 0.09 : 0.12, dest: musicGain, delay: dt });
     if (s % 4 === 0) {
       const b = bass[(s / 4) | 0];
-      tone(N(b), spb * 3.5, { type: 'triangle', vol: 0.35, dest: musicGain, delay: dt });
+      tone(N(mood === 2 ? minor(b) : b), spb * 3.5, { type: 'triangle', vol: 0.35, dest: musicGain, delay: dt });
     }
     if (s % 8 === 4) noiseHat(dt);
     nextNoteTime += spb; step++;

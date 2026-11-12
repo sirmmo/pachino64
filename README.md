@@ -2,7 +2,8 @@
 
 A 3D collect-the-stars platformer in the browser. Capitan Pachino, a tomato pirate, returns to the
 Garden Isle to find it overrun: **vegetables are friends, steaks and fish are enemies**.
-Recover the 7 Golden Stars.
+Recover the 7 Golden Stars of the Garden Isle, then step through the Star Gate to Isola Brace
+for 5 more.
 
 **Play:** https://sirmmo.github.io/pachino64/
 
@@ -24,7 +25,7 @@ and there are JUMP, SLASH and DOWN (crouch / ground pound) buttons. Landscape wo
 Crouch + jump while running is a long jump, crouch + jump while standing is a backflip,
 and jumping again right after hitting a wall in the air is a wall kick.
 
-## The seven stars
+## World 1: Garden Isle
 
 1. King Steak of Mount Grill
 2. Top of the Sky Carrot Tower
@@ -33,6 +34,20 @@ and jumping again right after hitting a wall in the air is a wall kick.
 5. Big Catch at Lake Lattuga
 6. 100 Coin Feast
 7. Steak Roundup
+
+## World 2: Isola Brace
+
+Collecting all seven stars wakes the Star Gate on the beach just south of the starting point.
+It leads to Isola Brace, a volcanic isle in a sea of hot sauce (falling in burns and bounces you
+back out). The gate on the other side leads home again.
+
+8. Don Prosciutto of Vulcano Ragù
+9. Across the Sizzling Sauce
+10. Top of the Spiedino Spire
+11. Eight Sunny Lemons
+12. Rack of Ribs Roundup
+
+Racks of ribs are immune to the sword: stomp them, ground pound them or knock them into the sauce.
 
 ## Run locally
 

@@ -34,7 +34,7 @@
   #counters { position:absolute; top:16px; left:20px; font-size:30px; line-height:1.25; }
   #counters .row { display:flex; align-items:center; gap:8px; }
   #counters .ico { width:30px; text-align:center; }
-  #peppers { display:none; }
+  #peppers, #lemons { display:none; }
   #lives { position:absolute; top:16px; right:20px; font-size:30px; text-align:right; }
   #health { position:absolute; top:12px; left:50%; transform:translateX(-50%); width:110px; height:110px; transition:opacity .4s; }
   #banner { position:absolute; top:34%; width:100%; text-align:center; font-size:64px; opacity:0; transition:opacity .3s, transform .3s; transform:scale(.8); }
@@ -57,10 +57,13 @@
   kbd { background:#fff; color:var(--ink); border-radius:5px; padding:0 6px; font-family:inherit; font-weight:900; box-shadow:0 2px 0 #999; }
   #pause, #gameover, #ending { background: rgba(20,10,40,.72); display:none; }
   #pause h2, #gameover h2, #ending h2 { font-size:64px; margin:0 0 14px; color:var(--gold); }
-  #starlist { list-style:none; padding:0; margin:0; font-size:22px; font-weight:900; text-align:left; }
-  #starlist li { padding:4px 0; }
+  #starlist { list-style:none; padding:0; margin:0; font-size:19px; font-weight:900; text-align:left; columns:2; column-gap:40px; }
+  #starlist li { padding:3px 0; break-inside:avoid; }
+  #starlist li.hd + li ~ li.hd { break-before:column; }
   #starlist li.got { color: var(--gold); }
   #starlist li.no { color:#aaa; }
+  #starlist li.hd { color:#fff; font-family:'Luckiest Guy','Impact',sans-serif; letter-spacing:1px; font-size:20px; opacity:.85; }
+  #pause { overflow-y:auto; justify-content:safe center; padding:12px 0; }
   .btn { margin-top:22px; font-size:26px; padding:10px 28px; background:var(--red); color:#fff; border:4px solid var(--ink); border-radius:16px; cursor:pointer; font-family:'Luckiest Guy'; letter-spacing:1px; }
   #loading { position:fixed; inset:0; background:#2a1840; color:#fff; display:flex; align-items:center; justify-content:center; font-size:40px; z-index:10; }
   #fade { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition: opacity .35s; }
@@ -75,6 +78,7 @@
     <div class="row"><span class="ico">⭐</span><span>× <span id="stars">0</span></span></div>
     <div class="row"><span class="ico">🪙</span><span>× <span id="coins">0</span></span></div>
     <div class="row" id="peppers"><span class="ico">🌶️</span><span>× <span id="pepperN">0</span>/8</span></div>
+    <div class="row" id="lemons"><span class="ico">🍋</span><span>× <span id="lemonN">0</span>/8</span></div>
   </div>
   <div id="lives" class="big">🍅 × <span id="livesN">4</span></div>
   <div id="banner" class="big"></div>
@@ -119,7 +123,7 @@
 </div>
 <div id="ending" class="screen">
   <h2 class="big">Hooray, Capitano!</h2>
-  <div class="big" style="font-size:26px; max-width:760px">All 7 Golden Stars are back in the Garden.<br>The steaks are grilled, the fish are back in the pond, and the vegetables are throwing a party in your honour!</div>
+  <div class="big" style="font-size:26px; max-width:760px">All 12 Golden Stars are home, from the Garden Isle to Isola Brace.<br>King Steak is grilled, Don Prosciutto is sliced, and the vegetables are throwing a party in your honour!</div>
   <button class="btn" id="keepplaying">Keep exploring</button>
 </div>
 <div id="fade"></div>
