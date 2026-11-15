@@ -3,8 +3,9 @@
 A 3D collect-the-stars platformer in the browser. Capitan Pachino, a tomato pirate, returns to the
 Garden Isle to find it overrun: **vegetables are friends, steaks and fish are enemies**.
 Recover the 7 Golden Stars of the Garden Isle, then step through the Star Gate to Isola Brace
-for 5 more, through the Ice Gate to Mare Surgelato for another 5, and through the Candy Gate
-to Dolceterra for 5 more.
+for 5 more, through the Ice Gate to Mare Surgelato for another 5, through the Candy Gate
+to Dolceterra for 5 more, and finally through the Kitchen Gate to La Grande Cucina for the last 5:
+27 stars in all.
 
 **Play:** https://sirmmo.github.io/pachino64/
 
@@ -80,6 +81,21 @@ you (hold jump for more height) and caramel is sticky.
 
 Meatballs never stop hopping while they chase you, and will follow you off an edge. Barone Tacchino
 hops three times, sending a shockwave on each landing, and is then out of breath.
+
+## World 5: La Grande Cucina
+
+Collecting the five stars of Dolceterra wakes the Kitchen Gate on its arrival biscuit. In the
+Giant Kitchen you are tiny: falling off the counter costs health, hobs burn while they glow red,
+knives chop on a rhythm, steam lifts you, and the sink is deep enough to swim in.
+
+23. Il Mannarone, the Chef's Cleaver
+24. Top Shelf of the Fridge
+25. Across the Hot Hobs
+26. Eight Crunchy Pickles
+27. The Spice Rack Summit
+
+Burgers take two hits (the bun flies off first). Il Mannarone hovers over you and chops: step out
+from under his shadow, and hit him with the sword while he is stuck in the board.
 
 ## Run locally
 

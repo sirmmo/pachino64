@@ -136,6 +136,13 @@ const matFrost = new THREE.MeshLambertMaterial({ map: texFrost });
 const matBiscuit = new THREE.MeshLambertMaterial({ map: texBiscuit });
 const matCookieTop = new THREE.MeshLambertMaterial({ map: texCookieTop });
 const matPlate = new THREE.MeshLambertMaterial({ color: 0xf4f0ea });
+// World 5 materials: marble worktop on teal cabinets, brushed steel
+const texMarble = canvasTex(64, (g, s) => { speckle(g, s, '#eeeae4', ['#e4dfd6', '#f8f5f0', '#dcd6cc'], 300); iceLines(g, s, 'rgba(150,140,130,.5)', 5); });
+const texCabinet = canvasTex(64, (g, s) => { speckle(g, s, '#4f9a94', ['#479088', '#58a49e', '#438880'], 250); g.strokeStyle = '#2f6e68'; g.lineWidth = 2; g.strokeRect(5, 5, s - 10, s - 10); g.fillStyle = '#e8dcc0'; g.fillRect(s / 2 - 5, 9, 10, 3); });
+const texSteel = canvasTex(64, (g, s) => { g.fillStyle = '#aab2bc'; g.fillRect(0, 0, s, s); for (let y = 0; y < s; y++) { g.fillStyle = `rgba(${rand() < 0.5 ? '255,255,255' : '60,70,80'},${rand() * 0.18})`; g.fillRect(0, y, s, 1); } });
+const matMarble = new THREE.MeshLambertMaterial({ map: texMarble });
+const matCabinet = new THREE.MeshLambertMaterial({ map: texCabinet });
+const matSteel = new THREE.MeshLambertMaterial({ map: texSteel });
 
 // ---------------------------------------------------------------------------
 // World: heightfield, solids, water
@@ -151,6 +158,7 @@ function groundHeight(x, z) {
   return h;
 }
 function waterLevelAt(x, z) {
+  if (x > 7000) return x > SINK.x0 && x < SINK.x1 && z > SINK.z0 && z < SINK.z1 ? SINK.level : null; // the kitchen sink
   if (x > 3000 && x < 5000) return COLD;
   if (x > 1000) return null;
   if (Math.hypot(x - POND.x, z - POND.z) < POND.r) return POND.level;
@@ -218,7 +226,7 @@ function worldUVBox(w, h, d, cx, cy, cz, sc = 0.25) {
 }
 function terrainBox(x0, x1, y0, y1, z0, z1, { mat = 'grass' } = {}) {
   const w = x1 - x0, h = y1 - y0, d = z1 - z0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
-  const mats = mat === 'stone' ? matStone : mat === 'basalt' ? six(matBasaltSide, matBasaltTop) : mat === 'snow' ? six(matIceSide, matSnow) : mat === 'ice' ? six(matIceSide, matIceTop) : mat === 'hull' ? six(matHull, matDeck) : mat === 'sponge' ? six(matSpongeSide, matFrost) : mat === 'biscuit' ? matBiscuit : mat === 'plate' ? matPlate : six(matDirt, matGrassTop);
+  const mats = mat === 'stone' ? matStone : mat === 'basalt' ? six(matBasaltSide, matBasaltTop) : mat === 'snow' ? six(matIceSide, matSnow) : mat === 'ice' ? six(matIceSide, matIceTop) : mat === 'hull' ? six(matHull, matDeck) : mat === 'sponge' ? six(matSpongeSide, matFrost) : mat === 'biscuit' ? matBiscuit : mat === 'plate' ? matPlate : mat === 'marble' ? six(matCabinet, matMarble) : mat === 'steel' ? matSteel : mat === 'board' ? matDeck : six(matDirt, matGrassTop);
   const m = new THREE.Mesh(worldUVBox(w, h, d, cx, cy, cz), mats);
   m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m);
   if (mat === 'grass') {
@@ -307,7 +315,7 @@ function moveBody(b, dt) {
 // ---------------------------------------------------------------------------
 const loader = new GLTFLoader();
 const models = {};
-const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones', 'meat-ribs', 'whole-ham', 'sausage', 'lemon', 'pot-stew', 'frying-pan', 'bottle-ketchup', 'maki-salmon', 'maki-roe', 'sushi-salmon', 'sushi-egg', 'rice-ball', 'celery-stick', 'avocado', 'ice-cream', 'popsicle', 'soy', 'cake-birthday', 'cupcake', 'lollypop', 'cookie', 'donut-sprinkles', 'pudding', 'strawberry', 'meat-patty', 'turkey', 'pear', 'pineapple', 'orange', 'watermelon', 'whipped-cream'];
+const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones', 'meat-ribs', 'whole-ham', 'sausage', 'lemon', 'pot-stew', 'frying-pan', 'bottle-ketchup', 'maki-salmon', 'maki-roe', 'sushi-salmon', 'sushi-egg', 'rice-ball', 'celery-stick', 'avocado', 'ice-cream', 'popsicle', 'soy', 'cake-birthday', 'cupcake', 'lollypop', 'cookie', 'donut-sprinkles', 'pudding', 'strawberry', 'meat-patty', 'turkey', 'pear', 'pineapple', 'orange', 'watermelon', 'whipped-cream', 'burger', 'hot-dog', 'mug', 'pepper-mill', 'shaker-salt', 'shaker-pepper', 'loaf', 'cheese', 'knife-block', 'bottle-oil', 'pot', 'pot-lid'];
 const PLAT = ['tree', 'tree-pine', 'coin-gold', 'star', 'heart', 'spring', 'flag', 'platform', 'block-moving', 'block-moving-blue', 'crate', 'crate-item', 'rocks', 'fence-straight', 'flowers', 'flowers-tall', 'grass', 'hedge', 'mushrooms', 'plant', 'sign', 'stones', 'barrel', 'chest', 'pipe', 'poles', 'tree-snow', 'tree-pine-snow'];
 function loadGLB(url) { return new Promise((res, rej) => loader.load(url, (g) => res(g.scene), undefined, rej)); }
 async function loadAll() {
@@ -429,20 +437,27 @@ const STAR_NAMES = {
   raft: 'Biscuit Rafts to Isola Bignè',
   berries: 'Eight Wild Strawberries',
   polpette: 'Meatball Roundup',
+  cleaver: "Il Mannarone, the Chef's Cleaver",
+  fridge: 'Top Shelf of the Fridge',
+  hobs: 'Across the Hot Hobs',
+  pickles: 'Eight Crunchy Pickles',
+  spice: 'The Spice Rack Summit',
 };
 const STAR_ORDER = ['boss', 'tower', 'peppers', 'kids', 'fish', 'coins', 'steaks'];
 const STAR_ORDER2 = ['ham', 'crossing', 'skewer', 'lemons', 'ribs'];
 const STAR_ORDER3 = ['tuna', 'cono', 'belt', 'peas', 'thaw'];
 const STAR_ORDER4 = ['turkey', 'jelly', 'raft', 'berries', 'polpette'];
-const TOTAL_STARS = STAR_ORDER.length + STAR_ORDER2.length + STAR_ORDER3.length + STAR_ORDER4.length;
+const STAR_ORDER5 = ['cleaver', 'fridge', 'hobs', 'pickles', 'spice'];
+const TOTAL_STARS = STAR_ORDER.length + STAR_ORDER2.length + STAR_ORDER3.length + STAR_ORDER4.length + STAR_ORDER5.length;
 const starsIn = (order) => order.filter((id) => G.stars.has(id)).length;
-const world1Stars = () => starsIn(STAR_ORDER), world2Stars = () => starsIn(STAR_ORDER2), world3Stars = () => starsIn(STAR_ORDER3);
+const world1Stars = () => starsIn(STAR_ORDER), world2Stars = () => starsIn(STAR_ORDER2), world3Stars = () => starsIn(STAR_ORDER3), world4Stars = () => starsIn(STAR_ORDER4);
 let saved = [];
 try { saved = JSON.parse(localStorage.getItem('pachino64') || '{}').stars || []; } catch (e) { saved = []; }
 const G = {
   mode: 'loading', stars: new Set(saved), coins: 0, lives: 4, health: 8, peppers: 0, kids: 0, fishKilled: 0, steaksKilled: 0,
   checkpoint: SPAWN.clone(), time: 0, healthShow: 0, coinStarSpawned: false, nextLifeAt: 50, endingShown: saved.length >= TOTAL_STARS,
   world: 1, lemons: 0, gateCool: 0, gateAnnounced: STAR_ORDER.every((id) => saved.includes(id)),
+  pickles: 0, gate5Announced: STAR_ORDER4.every((id) => saved.includes(id)),
   berries: 0, gate4Announced: STAR_ORDER3.every((id) => saved.includes(id)),
   peas: 0, thawed: 0, coldT: 0, runT: 0, gate3Announced: STAR_ORDER2.every((id) => saved.includes(id)),
 };
@@ -457,6 +472,7 @@ function updateHUD(dt) {
   $('lemonN').textContent = G.lemons; $('lemons').style.display = G.world === 2 && G.lemons > 0 && G.lemons < 8 ? 'flex' : 'none';
   $('peaN').textContent = G.peas; $('peas').style.display = G.world === 3 && G.peas > 0 && G.peas < 8 ? 'flex' : 'none';
   $('berryN').textContent = G.berries; $('berries').style.display = G.world === 4 && G.berries > 0 && G.berries < 8 ? 'flex' : 'none';
+  $('pickleN').textContent = G.pickles; $('pickles').style.display = G.world === 5 && G.pickles > 0 && G.pickles < 8 ? 'flex' : 'none';
   $('timerN').textContent = Math.ceil(G.runT); $('timer').style.display = G.runT > 0 ? 'flex' : 'none';
   if (toastT > 0 && (toastT -= dt) <= 0) $('toast').classList.remove('show');
   if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').classList.remove('show');
@@ -543,6 +559,11 @@ function collectItem(it) {
       toast(`Wild Strawberry ${G.berries} / 8`);
       if (G.berries === 8) spawnStar('berries', new THREE.Vector3(W4X + 7, 4.2, 12));
       break;
+    case 'pickle':
+      G.pickles++; sfx.redcoin(); burst(p, { n: 12, color: 0x7ac050, speed: 4, life: 0.6 }); addCoins(2);
+      toast(`Crunchy Pickle ${G.pickles} / 8`);
+      if (G.pickles === 8) spawnStar('pickles', new THREE.Vector3(W5X - 7, 4.2, 12));
+      break;
     case 'heart': break;
     case 'star': collectStar(it.id); break;
     case 'kid': break;
@@ -554,7 +575,7 @@ function updateItems(dt) {
     it.t += dt;
     const m = it.mesh;
     if (it.type === 'coin') m.rotation.y += dt * 4;
-    else if (it.type === 'pepper' || it.type === 'lemon' || it.type === 'pea' || it.type === 'berry') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
+    else if (it.type === 'pepper' || it.type === 'lemon' || it.type === 'pea' || it.type === 'berry' || it.type === 'pickle') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
     else if (it.type === 'star') { m.rotation.y += dt * 2.2; m.position.y = it.pos.y + Math.sin(it.t * 2) * 0.25; }
     else if (it.type === 'heart') {
       const near = player.pos.distanceTo(it.pos) < 2.2;
@@ -586,6 +607,7 @@ function breakCrate(c) {
   else if (c.contents === 'lemon') lemon(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'pea') pea(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'berry') berry(p.x, p.y + 0.3, p.z);
+  else if (c.contents === 'pickle') pickle(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'heart') heartPickup(p.x, p.y - 0.6, p.z);
 }
 const springs = [];
@@ -687,6 +709,8 @@ const STEAK_TYPES = {
   maki: { model: 'maki-salmon', s: 12, speed: 5, r: 0.75, h: 1.45, roller: true },    // aims, then rolls in a straight line
   frozen: { model: 'fish', s: 3.3, speed: 2.4, r: 0.8, h: 2.1, iced: true },          // ground pound cracks the ice first
   polpetta: { model: 'meat-patty', s: 6, speed: 4.6, r: 0.75, h: 1.9, hopper: true },      // never stops hopping while it chases
+  burger: { model: 'burger', s: 5, speed: 3.8, r: 1.0, h: 1.3, tough: true },               // takes two hits: the bun flies off first
+  hotdog: { model: 'hot-dog', s: 3.4, speed: 6.4, r: 0.6, h: 2.0 },
 };
 function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 } = {}) {
   type = type || (cooked ? 'cooked' : 'raw'); const T = STEAK_TYPES[type];
@@ -699,16 +723,17 @@ function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 }
   else if (type === 'ribs') { body.rotation.x = Math.PI / 2; body.position.y = 0.19 * s + 0.05; body.position.z = -0.1; }
   else if (type === 'maki') { body.rotation.z = Math.PI / 2; body.position.x = 0.035 * s; }
   else if (type === 'frozen') { body.rotation.x = -Math.PI / 2; body.position.set(0, 0.31 * s, 0.16 * s); }
+  else if (type === 'burger' || type === 'hotdog') body.position.y = 0.02;
   else if (type === 'polpetta') { body.rotation.x = Math.PI / 2; body.position.y = 0.17 * s + 0.05; body.position.z = -0.1; }
   else { body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.05; body.position.z = -0.1; }
   let spin = null, ice = null;
   if (type === 'maki') { spin = new THREE.Group(); spin.position.y = 0.06 * s; spin.add(body); tilt.add(spin); }
   else if (type === 'frozen') { const turn = new THREE.Group(); turn.rotation.y = Math.PI / 2; turn.add(body); tilt.add(turn); }
   else tilt.add(body);
-  addEyes(tilt, type === 'sausage' ? { hf: 0.74, size: 0.13, spread: 0.2, angry: true } : type === 'maki' ? { hf: 0.6, size: 0.13, spread: 0.16, angry: true } : type === 'frozen' ? { hf: 0.74, size: 0.1, spread: 0.13, angry: true } : { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
+  addEyes(tilt, type === 'burger' ? { hf: 0.55, size: 0.24, spread: 0.2, angry: true } : type === 'hotdog' ? { hf: 0.72, size: 0.12, spread: 0.2, angry: true } : type === 'sausage' ? { hf: 0.74, size: 0.13, spread: 0.2, angry: true } : type === 'maki' ? { hf: 0.6, size: 0.13, spread: 0.16, angry: true } : type === 'frozen' ? { hf: 0.74, size: 0.1, spread: 0.13, angry: true } : { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
   if (type === 'frozen') { ice = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.5, 1.7), matIceBlock); ice.position.y = 1.25; tilt.add(ice); }
   const e = {
-    kind: 'steak', type, w, armored: !!T.armored, roller: !!T.roller, iced: !!T.iced, hopper: !!T.hopper, spin, ice, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
+    kind: 'steak', type, w, armored: !!T.armored, roller: !!T.roller, iced: !!T.iced, hopper: !!T.hopper, tough: !!T.tough, spin, ice, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
     pos: root.position, vel: new THREE.Vector3(), r: T.r, h: T.h, onGround: true, alive: true, state: 'patrol', t: 0,
     target: new THREE.Vector3(x, gy, z), speed: T.speed, facing: rand() * 6, hop: 0,
   };
@@ -864,6 +889,7 @@ function updateSteak(e, dt) {
   if (e.w === 2 && e.pos.y < LAVA) { burst(e.pos.clone().setY(LAVA + 0.2), { n: 14, color: 0xff9a2a, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // sizzled in the sauce
   if (e.w === 3 && e.pos.y < COLD - 0.3) { burst(e.pos.clone().setY(COLD + 0.2), { n: 14, color: 0x9fd8ff, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // plop
   if (e.w === 4 && e.pos.y < CHOC) { burst(e.pos.clone().setY(CHOC + 0.2), { n: 14, color: 0x7a4424, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // glub
+  if (e.w === 5 && e.pos.y < -5) { killEnemy(e); return; } // off the counter
   // waddle hop animation
   e.hop += dt * (speed > 2 ? 12 : 7);
   e.root.rotation.y = e.facing;
@@ -879,11 +905,18 @@ function updateSteak(e, dt) {
       else if (player.vel.y < 0 && dy > e.h * 0.45) { player.bounce(12); sfx.hit(); toast('Frozen solid! Ground pound it to crack the ice!', 1.8); }
       else hurtPlayer(1, e.pos);
     }
-    else if (player.vel.y < 0 && dy > e.h * 0.45) { killEnemy(e); player.bounce(player.action === 'gpFall' ? 8 : 12); }
-    else if (player.action === 'gpFall') killEnemy(e);
-    else if (player.action === 'longjump' && player.vel.y < 0) killEnemy(e); // belly slide hit
+    else if (player.vel.y < 0 && dy > e.h * 0.45) { hitEnemy(e); player.bounce(player.action === 'gpFall' ? 8 : 12); }
+    else if (player.action === 'gpFall') hitEnemy(e);
+    else if (player.action === 'longjump' && player.vel.y < 0) hitEnemy(e); // belly slide hit
     else hurtPlayer(1, e.pos);
   }
+}
+function hitEnemy(e, how) {
+  if (!e.tough) { killEnemy(e, how); return; }
+  e.tough = false; e.speed *= 1.35; e.state = 'knock'; e.t = 0; e.onGround = false; e.root.scale.setScalar(0.8); sfx.hit();
+  const a = Math.atan2(e.pos.x - player.pos.x, e.pos.z - player.pos.z); e.vel.set(Math.sin(a) * 7, 6.5, Math.cos(a) * 7);
+  burst(e.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), { n: 10, color: 0xe8b060, speed: 6, size: 0.3, grav: 20, life: 0.6, up: 5 });
+  toast('The bun flew off! Hit it again!', 1.6);
 }
 function crackIce(e) {
   e.iced = false; e.tilt.remove(e.ice); e.speed = 5.4; e.state = 'knock'; e.t = 0; e.onGround = false; e.vel.set(0, 6, 0); sfx.crate();
@@ -1123,7 +1156,7 @@ function updatePlayer(dt) {
     const target = water - 0.75; p.vel.y = lerp(p.vel.y, (target - p.pos.y) * 4, dt * 6);
     const sp = 4.5; p.vel.x = lerp(p.vel.x, mx * mag * sp, dt * 4); p.vel.z = lerp(p.vel.z, mz * mag * sp, dt * 4);
     if (mag > 0.1) p.facing += angDiff(p.facing, Math.atan2(mx, mz)) * Math.min(1, dt * 8);
-    if (p.jumpBuf > 0) { p.vel.y = G.world === 3 ? 14 : 12; p.cutJump = G.world === 3; p.jumpBuf = 0; sfx.splash(); burst(p.pos, { n: 8, color: 0x9fd8ff, speed: 3, grav: 15, up: 4 }); startAction('jump'); p.jumpKind = 1; }
+    if (p.jumpBuf > 0) { p.vel.y = G.world === 3 ? 14 : 12; p.cutJump = G.world !== 1; p.jumpBuf = 0; sfx.splash(); burst(p.pos, { n: 8, color: 0x9fd8ff, speed: 3, grav: 15, up: 4 }); startAction('jump'); p.jumpKind = 1; }
     if (Math.random() < dt * 6 && mag > 0.1) burst(p.pos.clone().setY(water), { n: 1, color: 0xffffff, speed: 1, life: 0.4, size: 0.2 });
   } else if (p.action === 'gpStart') {
     p.vel.set(0, 0, 0); if (p.at > 0.28) { startAction('gpFall'); p.vel.y = -30; }
@@ -1183,6 +1216,7 @@ function updatePlayer(dt) {
 
   // gravity
   if (!p.swimming && p.action !== 'gpStart' && p.action !== 'star') p.vel.y = Math.max(p.vel.y - GRAV * dt, -MAX_FALL);
+  for (const s of steams) if (p.pos.y > s.y0 - 0.2 && p.pos.y < s.y1 && Math.hypot(p.pos.x - s.x, p.pos.z - s.z) < s.r) { p.vel.y = Math.min(p.vel.y + 75 * dt, 9); p.onGround = false; } // steam lifts you
 
   // carried by moving platform
   if (p.onGround && p.ground && p.ground.vel) p.pos.add(p.ground.vel);
@@ -1252,6 +1286,12 @@ function updatePlayer(dt) {
     }
   } else p.inChoc = false;
   if (p.onGround) p.chocHops = 0;
+  // the giant kitchen: it is a long way down from the counter
+  if (G.world === 5 && p.pos.y < -6 && G.mode === 'play') {
+    setHealth(G.health - 1); sfx.hurt(); toast('Whoa! You fell off the counter!', 1.6);
+    p.pos.copy(p.lastSafe).add(new THREE.Vector3(0, 1.5, 0)); p.vel.set(0, 0, 0); p.invuln = 1.5; camState.snap = true;
+    if (G.health <= 0) killPlayer();
+  }
   // checkpoints
   for (const f of flags) if (!f.on && p.pos.distanceTo(f.pos) < 2.5) {
     f.on = true; G.checkpoint.copy(f.pos).add(new THREE.Vector3(1.5, 0.2, 0)); sfx.redcoin(); toast('Checkpoint!', 1.4);
@@ -1272,10 +1312,11 @@ function slashHits() {
   for (const e of enemies) {
     if (!e.alive || e.state === 'swim') continue;
     const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz), dy = e.pos.y - p.pos.y;
-    const reach = (e.kind === 'boss' || e.kind === 'hopboss' || e.kind === 'tuna' ? e.r + 2 : 2.6);
+    const reach = (e.kind === 'boss' || e.kind === 'hopboss' || e.kind === 'tuna' || e.kind === 'cleaver' ? e.r + 2 : 2.6);
     if (d > reach || dy > 2 || dy < -(e.h || 1.5)) continue;
     if (!spin && d > 0.8 && (dx * fx + dz * fz) / d < 0.2) continue;
     if (e.kind === 'ember') continue;
+    if (e.kind === 'cleaver') { if (e.state === 'stuck') hitCleaver(e); continue; }
     if (e.kind === 'tuna') { if (e.state === 'flop') { sfx.hit(); toast('His scales are too slippery — ground pound him!', 1.8); } continue; }
     if (e.kind === 'boss' || e.kind === 'hopboss') { if (e.state === 'stunned') hitBoss(e); else { sfx.hit(); toast('Too tough! Make him dizzy first!', 1.5); } }
     else if (e.armored || e.iced) { // swords bounce off bones and ice
@@ -1283,7 +1324,7 @@ function slashHits() {
       e.state = 'knock'; e.t = 0; e.onGround = false; e.vel.set(dx / (d || 1) * 8, 6.5, dz / (d || 1) * 8);
       burst(e.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 6, color: 0xffffff, speed: 4, life: 0.3 });
     }
-    else killEnemy(e, 'slash');
+    else hitEnemy(e, 'slash');
   }
   for (const c of crates) {
     if (!c.alive) continue; const cp = c.o.position; const d = Math.hypot(cp.x - p.pos.x, cp.z - p.pos.z);
@@ -1524,6 +1565,7 @@ const gates = [];
 const gateGold = new THREE.MeshStandardMaterial({ color: 0xffc928, metalness: 0.6, roughness: 0.3, emissive: 0x553300 });
 const gateStone = new THREE.MeshLambertMaterial({ color: 0x8a8590 });
 const gateCandy = new THREE.MeshStandardMaterial({ color: 0xff7ab0, metalness: 0.4, roughness: 0.3, emissive: 0x551030 });
+const gateSteel = new THREE.MeshStandardMaterial({ color: 0xd8e0e8, metalness: 0.8, roughness: 0.2, emissive: 0x30363c });
 const gateIce = new THREE.MeshStandardMaterial({ color: 0x9fe4ff, metalness: 0.5, roughness: 0.25, emissive: 0x114466 });
 const gemOn = new THREE.MeshBasicMaterial({ color: 0xffe066 }), gemOff = new THREE.MeshLambertMaterial({ color: 0x4a4658 });
 const texSwirl = canvasTex(128, (g, s) => {
@@ -1568,6 +1610,7 @@ const ENV = {
   1: { top: 0x3a8cf0, bottom: 0xcfe9ff, fogN: 90, fogF: 300, sky: 0xeaf6ff, gnd: 0x5d7a3a, hemiI: 1.6, sun: 0xfff2dd, sunI: 2.4 },
   2: { top: 0x2a1446, bottom: 0xff9a55, fogN: 60, fogF: 250, sky: 0xffc9a0, gnd: 0x7a3010, hemiI: 1.5, sun: 0xffb880, sunI: 2.1 },
   4: { top: 0x6fb4ff, bottom: 0xffd0e6, fogN: 80, fogF: 300, sky: 0xfff0f6, gnd: 0xc08060, hemiI: 1.7, sun: 0xfff0d8, sunI: 2.3 },
+  5: { top: 0xfff4dc, bottom: 0xf0d8b0, fogN: 110, fogF: 380, sky: 0xfff6e8, gnd: 0xb09070, hemiI: 1.7, sun: 0xfff0d0, sunI: 2.2 },
   3: { top: 0x0e1650, bottom: 0x7fd0de, fogN: 70, fogF: 280, sky: 0xd8f0ff, gnd: 0x6a8cc0, hemiI: 1.7, sun: 0xdfe8ff, sunI: 1.9 },
 };
 function setEnv(w) {
@@ -1581,8 +1624,9 @@ const WORLD_BANNER = {
   2: 'ISOLA BRACE<small>The Ember Isle — mind the hot sauce!</small>',
   3: 'MARE SURGELATO<small>The Frozen Sea — do not swim for long!</small>',
   4: 'DOLCETERRA<small>The Sugar Isles — do not sink in the chocolate!</small>',
+  5: 'LA GRANDE CUCINA<small>The Giant Kitchen — mind the knives!</small>',
 };
-const ARRIVE = { 1: new THREE.Vector3(0, 0.2, 49), 2: new THREE.Vector3(W2X, 1.2, 45), 3: new THREE.Vector3(W3X, 0.6, 45), 4: new THREE.Vector3(W4X, 1.2, 45) };
+const ARRIVE = { 1: new THREE.Vector3(0, 0.2, 49), 2: new THREE.Vector3(W2X, 1.2, 45), 3: new THREE.Vector3(W3X, 0.6, 45), 4: new THREE.Vector3(W4X, 1.2, 45), 5: new THREE.Vector3(W5X, 1.2, 45) };
 function travel(to) {
   if (G.mode !== 'play') return;
   G.mode = 'travel'; G.travelT = 0; G.travelTo = to; G.travelDone = false; sfx.appear(); $('fade').classList.add('on');
@@ -2204,6 +2248,7 @@ function buildWorld4() {
   // --- Arrival biscuit (south) ---
   terrainBox(X - 8, X + 8, -4, Y, 40, 62, BI);
   makeGate(X, Y, 59.5, 3, 0, { name: 'Candy Gate', gold: gateCandy });
+  makeGate(X - 6.3, Y, 51, 5, 5, { count: world4Stars, rot: Math.PI / 2, name: 'Kitchen Gate', gold: gateSteel, of: ' of Dolceterra' });
   lolly(-6.3, 60); lolly(6.3, 59.5); place('sign', X + 3, Y, 41, { s: 2.5 });
   place('cupcake', X + 6, Y, 52, { s: 6, solid: true, shrink: 0.3 });
   crate(X - 6, 43, 'berry', Y);
@@ -2294,6 +2339,292 @@ function buildWorld4() {
   spawnStar('raft', V3(X - 47.5, Y + 2.8, 16), { silent: true });
   steak(X - 44, 12, w4('polpetta', 3));
   npc('onion', 'Cipollotto', X - 44, 20, 8, ['You rode the biscuit rafts! I have been stuck on Isola Bignè since the meatballs came.', 'Those chocolate-coated fish bones only leap — dodge them, you cannot bop them.', 'The star on the plate is yours, Capitano!'], { y: Y, eyes: { hf: 0.5 } });
+}
+
+// ---------------------------------------------------------------------------
+// World 5: La Grande Cucina, the Giant Kitchen
+// ---------------------------------------------------------------------------
+const SINK = { x0: W5X - 44, x1: W5X - 24, z0: 6, z1: 26, level: 0.4 };
+const pickleMat = new THREE.MeshLambertMaterial({ color: 0x5f9e3a }), pickleBump = new THREE.MeshLambertMaterial({ color: 0x457c2c });
+function pickle(x, y, z) {
+  const m = new THREE.Group(), b = new THREE.Group(); m.add(b); b.position.y = 0.6; b.rotation.z = 0.25;
+  b.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.6, 4, 12), pickleMat));
+  for (let i = 0; i < 8; i++) { const k = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), pickleBump); const a = i * 2.4; k.position.set(Math.cos(a) * 0.29, -0.42 + (i / 7) * 0.84, Math.sin(a) * 0.29); b.add(k); }
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(eyeGeo, eyeWhite); e.scale.setScalar(0.1); e.position.set(sx * 0.12, 0.22, 0.27); b.add(e); const pu = new THREE.Mesh(eyeGeo, eyeBlack); pu.scale.setScalar(0.5); pu.position.z = 0.62; e.add(pu); }
+  return addItem('pickle', m, V3(x, y, z));
+}
+// Hobs: stove burners that switch on and off. Glowing red means ouch.
+const hobs = [];
+function hob(x, top, z, r, phase) {
+  const mat = new THREE.MeshLambertMaterial({ color: 0x2a2a30, emissive: 0xff3a00, emissiveIntensity: 0 });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 32), mat); disc.rotation.x = -Math.PI / 2; disc.position.set(x, top + 0.03, z); scene.add(disc);
+  const coil = new THREE.MeshLambertMaterial({ color: 0x4a4a52, emissive: 0xff6a10, emissiveIntensity: 0 });
+  for (const k of [0.3, 0.6, 0.9]) { const t = new THREE.Mesh(new THREE.TorusGeometry(r * k, 0.1, 6, 32), coil); t.rotation.x = Math.PI / 2; t.position.set(x, top + 0.07, z); scene.add(t); }
+  hobs.push({ x, y: top, z, r, phase, mat, coil, on: false });
+}
+function updateHobs(dt) {
+  for (const h of hobs) {
+    const t = (G.time + h.phase) % 5.2, on = t < 2.4, warm = t > 4.4 ? (t - 4.4) / 0.8 : 0;
+    h.on = on; h.mat.emissiveIntensity = lerp(h.mat.emissiveIntensity, on ? 1.5 : warm * 0.45, Math.min(1, dt * 10)); h.coil.emissiveIntensity = h.mat.emissiveIntensity * 1.3;
+    if (!on || G.world !== 5) continue;
+    if (Math.random() < dt * 8) burst(V3(h.x + (Math.random() - 0.5) * h.r * 1.4, h.y + 0.1, h.z + (Math.random() - 0.5) * h.r * 1.4), { n: 1, color: 0xff9a2a, speed: 0.5, size: 0.14, life: 0.9, grav: -5, up: 1.5 });
+    if (G.mode === 'play' && !player.dead && player.invuln <= 0 && player.pos.y < h.y + 0.4 && Math.hypot(player.pos.x - h.x, player.pos.z - h.z) < h.r - 0.15) {
+      hurtPlayer(1, V3(h.x, h.y, h.z)); toast('Hot hot hot! Wait until the hob goes dark.', 1.6);
+    }
+  }
+}
+// Chopping knives: wait up high, shake, slam down, stay stuck for a moment, rise again
+const choppers = [];
+const matBlade = new THREE.MeshStandardMaterial({ color: 0xcfd6de, metalness: 0.7, roughness: 0.3 }), matHandle = new THREE.MeshLambertMaterial({ color: 0x5a3a22 });
+function chopper(x, top, z, { alongX = true, len = 3.6, period = 2.8, phase = 0 } = {}) {
+  const g = new THREE.Group(); g.position.set(x, top, z); if (!alongX) g.rotation.y = Math.PI / 2; scene.add(g);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(len, 2.2, 0.18), matBlade); blade.position.y = 1.1; blade.castShadow = true; g.add(blade);
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(len * 0.5, 0.5, 0.42), matHandle); handle.position.y = 2.45; g.add(handle);
+  choppers.push({ g, x, y: top, z, alongX, len, period, phase, low: false });
+}
+function updateChoppers(dt) {
+  for (const c of choppers) {
+    const t = (G.time + c.phase) % c.period, up = 3.4;
+    const h = t < 0.12 ? up * (1 - t / 0.12) : t < 0.7 ? 0 : t < 1.4 ? up * (t - 0.7) / 0.7 : up;
+    c.g.position.y = c.y + h; c.g.position.x = c.x + (c.period - t < 0.45 ? Math.sin(G.time * 60) * 0.05 : 0);
+    const low = h < 1.0;
+    if (low && !c.low && G.world === 5 && player.pos.distanceTo(c.g.position) < 25) { sfx.hit(); burst(V3(c.x, c.y + 0.2, c.z), { n: 6, color: 0xe8dcc0, speed: 4, size: 0.2, grav: 15, life: 0.4, up: 3 }); }
+    c.low = low;
+    if (!low || G.mode !== 'play' || player.dead) continue;
+    const dx = Math.abs(player.pos.x - c.x), dz = Math.abs(player.pos.z - c.z);
+    if ((c.alongX ? dx : dz) < c.len / 2 + 0.3 && (c.alongX ? dz : dx) < 0.6 && player.pos.y < c.y + h + 2.2 && player.pos.y + player.h > c.y + h) hurtPlayer(1, V3(c.x, c.y, c.z + (c.alongX ? (player.pos.z < c.z ? 1 : -1) : 0)));
+  }
+}
+// Steam: a column of hot air that lifts you
+const steams = [];
+function steam(x, y0, z, y1, r = 1.7) {
+  const vent = new THREE.Mesh(new THREE.CircleGeometry(r, 24), new THREE.MeshLambertMaterial({ color: 0x3a3a42 })); vent.rotation.x = -Math.PI / 2; vent.position.set(x, y0 + 0.03, z); scene.add(vent);
+  steams.push({ x, y0, z, y1, r });
+}
+function updateSteams(dt) {
+  if (G.world !== 5) return;
+  for (const s of steams) for (let k = 0; k < 2; k++) if (Math.random() < dt * 22) {
+    const a = Math.random() * 6.28, rr = Math.random() * s.r * 0.8, m = new THREE.Mesh(pGeo, pMat(0xffffff)); m.position.set(s.x + Math.cos(a) * rr, s.y0 + Math.random() * 2, s.z + Math.sin(a) * rr); scene.add(m);
+    particles.push({ m, v: V3(0, 5, 0), life: 2.2, max: 2.2, size: 0.3, grav: -12 });
+  }
+}
+// Final boss: Il Mannarone, the Chef's cleaver. Hovers over you, chops, and gets stuck in the board.
+function makeCleaver(x, y, z, arena) {
+  const root = new THREE.Group(); root.position.set(x, y, z); scene.add(root);
+  const tilt = new THREE.Group(); root.add(tilt);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.34, 3.0, 5.2), matBlade); blade.position.y = 1.5; blade.castShadow = true; tilt.add(blade);
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 2.6), matHandle); handle.position.set(0, 2.4, -3.8); handle.castShadow = true; tilt.add(handle);
+  for (const face of [-1, 1]) for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(eyeGeo, eyeWhite); eye.scale.setScalar(0.34); eye.position.set(face * 0.22, 1.9, 0.7 + side * 0.75); tilt.add(eye);
+    const pupil = new THREE.Mesh(eyeGeo, eyeBlack); pupil.scale.setScalar(0.5); pupil.position.set(face * 0.62, 0, 0); eye.add(pupil);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.85), eyeBlack); brow.position.set(face * 0.3, 2.42, 0.7 + side * 0.75); brow.rotation.x = side * 0.4; tilt.add(brow);
+  }
+  const crown = new THREE.Group(); const gold = new THREE.MeshStandardMaterial({ color: 0xffc928, metalness: 0.6, roughness: 0.3 });
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.4, 14, 1, true), gold); band.material.side = THREE.DoubleSide; crown.add(band);
+  for (let i = 0; i < 6; i++) { const sp = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.55, 6), gold); const a = (i / 6) * Math.PI * 2; sp.position.set(Math.cos(a) * 0.62, 0.42, Math.sin(a) * 0.62); crown.add(sp); }
+  crown.position.set(0, 3.2, 0.7); tilt.add(crown);
+  const dizzy = new THREE.Group(); for (let i = 0; i < 3; i++) { const st = inst('star', 1.7, false); st.position.set(Math.cos(i * 2.1) * 1.8, 0, Math.sin(i * 2.1) * 1.8); dizzy.add(st); }
+  dizzy.position.y = 4.4; dizzy.visible = false; root.add(dizzy);
+  const shadow = new THREE.Group(); const sm = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 5.8), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false })); sm.rotation.x = -Math.PI / 2; shadow.add(sm); shadow.visible = false; scene.add(shadow);
+  const b = { kind: 'cleaver', root, tilt, dizzy, shadow, pos: root.position, r: 2.6, h: 3, alive: true, hp: 6, maxHp: 6, state: 'sleep', t: 0, arena, home: V3(x, y, z), yaw: 0, chops: 0 };
+  enemies.push(b); return b;
+}
+function hitCleaver(b) {
+  b.hp--; b.state = 'hurt'; b.t = 0; sfx.bossHit(); shake = 0.4;
+  burst(b.pos.clone().add(V3(0, 2, 0)), { n: 20, color: 0xfff2a0, speed: 7, life: 0.7 });
+  toast(b.hp > 1 ? 'CLANG! Again!' : b.hp === 1 ? 'One more hit!' : 'NOOO! My edge!', 1.6);
+}
+function updateCleaver(b, dt) {
+  const A = b.arena, fy = A.y, p = player;
+  if (!b.alive) {
+    b.t += dt; b.root.scale.set(1 + b.t, Math.max(0.02, 1 - b.t * 1.2), 1 + b.t);
+    if (b.t > 0.9 && !b.gone) { b.gone = true; scene.remove(b.root); scene.remove(b.shadow); burst(b.pos.clone().add(V3(0, 1.5, 0)), { n: 50, color: 0xffffff, speed: 10, size: 0.6, life: 1.2 }); spawnStar('cleaver', V3(b.home.x, fy + 2.2, b.home.z)); }
+    return;
+  }
+  b.t += dt;
+  const inArena = p.pos.y > fy - 0.5 && p.pos.x > A.x0 && p.pos.x < A.x1 && p.pos.z > A.z0 && p.pos.z < A.z1;
+  const hits = b.maxHp - b.hp, dx = p.pos.x - b.pos.x, dz = p.pos.z - b.pos.z, d = Math.hypot(dx, dz);
+  b.dizzy.visible = b.state === 'stuck'; b.shadow.visible = b.state === 'hover' || b.state === 'aim' || b.state === 'chop';
+  const along = -dx * Math.cos(b.yaw) + dz * Math.sin(b.yaw), across = dx * Math.sin(b.yaw) + dz * Math.cos(b.yaw);
+  const under = Math.abs(along) < 2.9 && Math.abs(across) < 0.9;
+  switch (b.state) {
+    case 'sleep':
+      b.tilt.rotation.z = 0.06;
+      if (inArena && G.mode === 'play') {
+        b.state = 'intro'; b.t = 0; b.tilt.rotation.z = 0;
+        openDialog('Il Mannarone', ['SHHHING! So YOU are the tomato who ruined all my master\'s recipes!', 'I am Il Mannarone, the Chef\'s own cleaver. Steak, ham, tuna, turkey — I chopped for all of them. Now I chop YOU!', '(Tip: watch the shadow and step out from under it. When he is stuck in the board, hit him with your SWORD. Stomping a blade is a bad idea.)']);
+      }
+      break;
+    case 'intro': if (G.mode === 'play') { b.state = 'rise'; b.t = 0; } break;
+    case 'rise':
+      b.pos.y += dt * 11;
+      if (b.pos.y >= fy + 7) { b.pos.y = fy + 7; b.state = 'hover'; b.t = 0; }
+      break;
+    case 'hover': {
+      if (!inArena) b.t -= dt;
+      else {
+        const v = (6.5 + hits * 0.6) * dt;
+        if (d > v) { b.pos.x += dx / d * v; b.pos.z += dz / d * v; }
+        b.yaw += angDiff(b.yaw, Math.atan2(dx, dz)) * Math.min(1, dt * 4);
+      }
+      b.pos.x = clamp(b.pos.x, A.x0 + 1, A.x1 - 1); b.pos.z = clamp(b.pos.z, A.z0 + 1, A.z1 - 1);
+      b.pos.y = fy + 7 + Math.sin(b.t * 5) * 0.2;
+      if (b.t > (b.chops > 0 ? 0.6 : 2.2 - hits * 0.15)) { b.state = 'aim'; b.t = 0; }
+      break;
+    }
+    case 'aim':
+      b.tilt.position.x = Math.sin(b.t * 60) * 0.09;
+      if (b.t > Math.max(0.32, 0.6 - hits * 0.04)) { b.state = 'chop'; b.t = 0; b.tilt.position.x = 0; sfx.longjump(); }
+      break;
+    case 'chop':
+      b.pos.y -= dt * 46;
+      if (b.pos.y <= fy) {
+        b.pos.y = fy; sfx.pound(); shake = 0.5; b.chops++;
+        burst(b.pos.clone().add(V3(0, 0.3, 0)), { n: 14, color: 0xe8c890, speed: 6, size: 0.3, grav: 20, life: 0.6, up: 5 });
+        ringFx(V3(b.pos.x, fy, b.pos.z), hits >= 2 ? { color: 0xfff2a0, life: 1.1, hurt: true, speed: 9 } : { max: 4 });
+        if (under && p.pos.y < fy + 3 && G.mode === 'play') hurtPlayer(2, b.pos);
+        if (b.chops >= (b.hp <= 2 ? 3 : b.hp <= 4 ? 2 : 1)) { b.state = 'stuck'; b.chops = 0; } else b.state = 'rise';
+        b.t = 0;
+      }
+      break;
+    case 'stuck':
+      b.tilt.rotation.z = Math.sin(b.t * 25) * 0.04 * Math.max(0, 1 - b.t); b.dizzy.rotation.y += dt * 4;
+      if (b.t > 2.9 - hits * 0.15) { b.state = 'rise'; b.t = 0; b.tilt.rotation.z = 0; }
+      break;
+    case 'hurt':
+      b.root.visible = Math.floor(b.t * 20) % 2 === 0;
+      if (b.t > 0.9) { b.root.visible = true; b.tilt.rotation.z = 0; if (b.hp <= 0) { b.alive = false; b.t = 0; sfx.bossHit(); } else { b.state = 'rise'; b.t = 0; } }
+      break;
+  }
+  b.root.rotation.y = b.yaw - Math.PI / 2; b.shadow.rotation.y = b.root.rotation.y; b.shadow.position.set(b.pos.x, fy + 0.05, b.pos.z);
+  if (G.mode !== 'play' || p.dead || b.state !== 'stuck' || !under) return;
+  if (p.vel.y < 0 && p.pos.y > fy + 2.2 && p.pos.y < fy + 3.6) { p.bounce(12); sfx.hit(); toast('Ouch, sharp! Use your SWORD on him!', 1.8); }
+  else if (p.pos.y < fy + 2.8) { const k = (across < 0 ? -1 : 1) * (0.9 - Math.abs(across)); p.pos.x += Math.sin(b.yaw) * k; p.pos.z += Math.cos(b.yaw) * k; }
+}
+
+function buildWorld5() {
+  const X = W5X, Y = 1, D = -40, MB = { mat: 'marble' }, ST = { mat: 'steel' }, BD = { mat: 'board' }, PL = { mat: 'plate' }, IC = { mat: 'ice' };
+  const w5 = (type, range = 4, y = Y) => ({ type, w: 5, range, y });
+  const wall = (x0, x1, y0, y1, z0, z1, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat); m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    m.castShadow = m.receiveShadow = true; scene.add(m); return addSolid({ x: x0, y: y0, z: z0 }, { x: x1, y: y1, z: z1 });
+  };
+  const prop = (name, x, z, s, y = Y, shrink = 0.25, r = 0) => place(name, X + x, y, z, { s, r, solid: true, shrink });
+  // the kitchen itself: tiled floor far below, tiled wall with a window
+  const texTile = canvasTex(64, (g, s) => { g.fillStyle = '#e8dcc4'; g.fillRect(0, 0, s, s); g.fillStyle = '#b8742c'; g.fillRect(0, 0, s / 2, s / 2); g.fillRect(s / 2, s / 2, s / 2, s / 2); });
+  texTile.repeat.set(40, 40);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshLambertMaterial({ map: texTile })); floor.rotation.x = -Math.PI / 2; floor.position.set(X, D, 0); floor.receiveShadow = true; scene.add(floor);
+  const texWall = canvasTex(64, (g, s) => { g.fillStyle = '#f4efe2'; g.fillRect(0, 0, s, s); g.strokeStyle = '#cfc4ac'; g.lineWidth = 2; g.strokeRect(1, 1, s - 2, s - 2); });
+  texWall.repeat.set(30, 12);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(420, 170), new THREE.MeshLambertMaterial({ map: texWall })); back.position.set(X, D + 85, -78); scene.add(back);
+  const win = new THREE.Mesh(new THREE.PlaneGeometry(70, 46), new THREE.MeshBasicMaterial({ color: 0xbfe6ff, fog: false })); win.position.set(X + 55, 52, -77.5); scene.add(win);
+  const frame = new THREE.MeshLambertMaterial({ color: 0x8a6a4a });
+  for (const [fx, fy, fw, fh] of [[55, 52, 74, 3], [55, 75, 74, 3], [55, 29, 74, 3], [19.5, 52, 3, 49], [90.5, 52, 3, 49], [55, 52, 3, 46]]) { const f = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, 1.5), frame); f.position.set(X + fx, fy, -77); scene.add(f); }
+
+  // --- Arrival chopping board (south) ---
+  terrainBox(X - 8, X + 8, D, Y, 40, 62, BD);
+  makeGate(X, Y, 59.5, 4, 0, { name: 'Kitchen Gate', gold: gateSteel });
+  prop('pepper-mill', -6.3, 60, 6); prop('shaker-salt', 6.3, 59.5, 8); place('sign', X + 3, Y, 41, { s: 2.5 });
+  crate(X - 6, 43, 'pickle', Y);
+  npc('broccoli', 'Nonno Broccolo', X + 5, 44.5, 4, [
+    'Capitano! I followed you through the gates. This is La Grande Cucina — the kitchen where all the trouble was cooked up!',
+    'Everything is HUGE here, and we are tiny. Fall off the counter and it is a long way down: you lose health and pop back up.',
+    'Keep off the hobs when they glow red, and never stand under a knife that is shaking.',
+    'The last 5 Golden Stars are here — and so is Il Mannarone, the Chef\'s cleaver. Coraggio, Capitano!',
+  ], { y: Y, eyes: { hf: 0.62 } });
+  terrainBox(X - 1.5, X + 1.5, D, Y, 30, 40, BD);
+  coinLine([X, Y + 0.7, 39], [X, Y + 0.7, 31], 5);
+  chopper(X, Y, 35, { len: 3.4 });
+
+  // --- the Worktop (centre) ---
+  terrainBox(X - 20, X + 20, D, Y, 2, 30, MB);
+  checkpoint(X - 3.5, Y, 28);
+  const mug = prop('mug', -14, 22, 8); pickle(X - 14.4, Y + 2.9, 22);
+  prop('loaf', 12, 24, 6); pickle(X + 12, Y + 3.4, 24);
+  prop('cheese', 14, 6.5, 6, Y, 0.5); prop('knife-block', -8, 27.6, 7, Y + 1.85, 0.2); prop('pepper-mill', 17.5, 27.5, 6); prop('shaker-salt', 15.5, 28, 8);
+  coinRing(X, Y + 0.8, 16, 6, 8); coinLine([X - 16, Y + 0.7, 14], [X - 8, Y + 0.7, 8], 5); coinLine([X + 6, Y + 0.7, 12], [X + 16, Y + 0.7, 14], 5);
+  crate(X + 3.5, 28, 'heart', Y); crate(X + 6.3, 28, 'coins', Y);
+  heartPickup(X - 17.5, Y + 0.5, 27);
+  steak(X - 8, 14, w5('burger', 5)); steak(X + 9, 10, w5('burger', 5));
+  steak(X + 12, 19, w5('hotdog', 4)); steak(X - 4, 6, w5('hotdog', 4));
+  npc('tomato', 'Mamma Pomodoro', X - 5.5, 25.5, 12, () => G.stars.has('pickles') && G.pickles >= 8 ? ['The jar is full again! You are the pride of the Garden Isle, Capitano.'] : [
+    'Capitano! My cousins, the Crunchy Pickles, jumped out of their jar when the Chef opened it.',
+    `There are eight of them hiding around the kitchen — you have ${G.pickles} of 8. Look on top of big things, in the sink and in the fridge.`,
+    'Find them all and a Golden Star will appear right here on the worktop!',
+  ], { y: Y, eyes: { hf: 0.6, size: 0.1 } });
+  // steam vent and the spice rack high above
+  steam(X - 15, Y, 8.5, 12.6);
+  terrainBox(X - 18, X + 8, 9.4, 10, 2, 5, BD);
+  prop('shaker-pepper', -9.5, 3.2, 8, 10, 0.1); prop('bottle-oil', -4, 4, 5, 10, 0.1); pickle(X - 13, 10.9, 3.5);
+  coinLine([X - 16, 10.7, 3.5], [X - 11, 10.7, 3.5], 3);
+  steak(X - 0.5, 3.5, w5('hotdog', 1.5, 10));
+  chopper(X + 3.2, 10, 3.5, { alongX: false, len: 3, phase: 1.1 });
+  spawnStar('spice', V3(X + 6.3, 11.3, 3.5), { silent: true });
+  npc('carrot', 'Captain Carota', X - 11.5, 10, 3.4, () => G.stars.has('spice') ? ['Up, up and away! I knew you had a head for heights.'] : [
+    'Ahoy! See the steam coming out of that vent? Step into it and it lifts you like a feather.',
+    'Ride it all the way up, then steer onto the spice rack above us.',
+    'A Golden Star is at the far end, past the knife. Wait until it is stuck in the shelf, then run under as it rises.',
+  ], { y: Y, eyes: { hf: 0.7, spread: 0.12, size: 0.07 } });
+
+  // --- the Great Chopping Board (north): sugar-cube steps, then the final boss ---
+  terrainBox(X - 1.5, X + 1.5, D, Y, -3, 0, PL); terrainBox(X - 1.5, X + 1.5, D, 1.8, -8, -5, PL);
+  coin(X, Y + 0.8, -1.5); coin(X, 2.6, -6.5);
+  terrainBox(X - 12, X + 12, D, 2.5, -44, -10, BD);
+  checkpoint(X + 9, 2.5, -11.6); heartPickup(X + 6, 3, -11.8); pickle(X, 3.4, -43.2);
+  npc('leek', 'Porro the Guard', X - 8.5, -11.8, 3.6, () => G.stars.has('cleaver') ? ['The cleaver is blunt and the kitchen is quiet. You did it, Capitano. You really did it!'] : [
+    'HALT! … Oh, Capitano. Beyond this line is the Great Chopping Board, and Il Mannarone himself.',
+    'He hangs in the air above you and then CHOPS. Watch his shadow and get out from under it!',
+    'When he is stuck in the board, hit him with your sword. Six times. The more you hurt him, the more often he chops before he gets stuck.',
+  ], { y: 2.5, eyes: { hf: 0.55 } });
+  makeCleaver(X, 2.5, -30, { x0: X - 10, x1: X + 10, z0: -42, z1: -14, y: 2.5 });
+
+  // --- the Stove (east): three hobs between rows of pots ---
+  terrainBox(X + 20, X + 62, D, Y, 6, 26, ST);
+  checkpoint(X + 22.5, Y, 9.5);
+  [29, 38, 47].forEach((bx, i) => { hob(X + bx, Y, 16, 3.4, i * 1.75); prop('pot', bx, 9.5, 9, Y, 0.4); prop('pot', bx, 22.5, 9, Y, 0.4); });
+  coinLine([X + 33.5, Y + 0.7, 14.5], [X + 33.5, Y + 0.7, 17.5], 3); coinLine([X + 42.5, Y + 0.7, 14.5], [X + 42.5, Y + 0.7, 17.5], 3);
+  pickle(X + 38, 4.4, 16);
+  prop('pot-lid', 57, 16, 8, Y, 0.6);
+  spawnStar('hobs', V3(X + 57, 3.5, 16), { silent: true });
+  heartPickup(X + 60, Y + 0.5, 8.5); steak(X + 56, 22, w5('burger', 3));
+  npc('pumpkin', 'Zia Zucca', X + 22.5, 22.5, 5, () => G.stars.has('hobs') ? ['You crossed the stove without a single burnt boot. Well… almost!'] : [
+    'Careful, dear! That is the Chef\'s stove, and the hobs keep switching on and off.',
+    'A hob glows faintly just before it turns red-hot. Cross when it goes dark, and rest in the gaps between the pots.',
+    'A Golden Star is sitting on a pot lid at the far end.',
+  ], { y: Y, eyes: { hf: 0.5 } });
+
+  // --- the Sink (west): somewhere to swim, with a few things floating in it ---
+  terrainBox(X - 24, X - 20, D, Y, 2, 26, ST); terrainBox(X - 44, X - 24, D, Y, 2, 6, ST); terrainBox(X - 44, X - 20, D, Y, 26, 30, MB);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), waterMat); water.rotation.x = -Math.PI / 2; water.position.set(X - 34, SINK.level, 16);
+  const wu = water.geometry.attributes.uv; for (let i = 0; i < wu.count; i++) wu.setXY(i, wu.getX(i) * 4, wu.getY(i) * 4);
+  scene.add(water);
+  const basin = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshLambertMaterial({ color: 0x6f7c8a })); basin.rotation.x = -Math.PI / 2; basin.position.set(X - 34, -5, 16); scene.add(basin);
+  const matSponge = new THREE.MeshLambertMaterial({ color: 0xf2d23f });
+  wall(X - 31, X - 28, 0, 0.9, 10, 14, matSponge); wall(X - 38.5, X - 35.5, 0.1, 0.85, 17.5, 20.5, matPlate); wall(X - 42.5, X - 39.5, 0, 0.9, 8, 12, matSponge);
+  pickle(X - 37, 1.7, 19); coin(X - 29.5, 1.7, 12); coin(X - 41, 1.7, 10);
+  const tap = new THREE.Mesh(new THREE.TorusGeometry(3, 0.45, 8, 18, Math.PI), new THREE.MeshStandardMaterial({ color: 0xcfd6de, metalness: 0.7, roughness: 0.3 })); tap.rotation.y = Math.PI / 2; tap.position.set(X - 34, Y, 25.5); scene.add(tap);
+  chopper(X - 32, Y, 28, { alongX: false, len: 3.4, phase: 0.6 }); steak(X - 38, 28, w5('hotdog', 2));
+  coinLine([X - 42, Y + 0.7, 28], [X - 24, Y + 0.7, 28], 6);
+
+  // --- the Fridge (far west): slippery shelves, all the way up ---
+  terrainBox(X - 62, X - 44, D, Y, 4, 28, PL);
+  const matFridge = new THREE.MeshLambertMaterial({ color: 0xe8eef2 });
+  wall(X - 62.6, X - 62, Y, 15, 3.4, 28.6, matFridge); wall(X - 62, X - 46, Y, 15, 3.4, 4, matFridge); wall(X - 62, X - 46, Y, 15, 28, 28.6, matFridge);
+  checkpoint(X - 45.5, Y, 6.5); heartPickup(X - 60, Y + 0.5, 26);
+  terrainBox(X - 49, X - 47, Y, 2.5, 8, 10, IC);
+  terrainBox(X - 61.5, X - 51, 3.5, 4, 6.5, 13.5, IC);
+  terrainBox(X - 60.5, X - 58.5, 4.9, 5.5, 15, 17, IC);
+  terrainBox(X - 61.5, X - 49, 6.5, 7, 18.5, 26, IC);
+  floe(X - 50.5, 8.5, 15.5);
+  terrainBox(X - 57, X - 47, 9.5, 10, 6.5, 12.5, IC);
+  steak(X - 56, 10, { type: 'frozen', w: 5, range: 2.5, y: 4 }); steak(X - 55, 22, { type: 'frozen', w: 5, range: 2.5, y: 7 });
+  pickle(X - 60, 7.9, 24.5); coinLine([X - 60, 4.7, 8], [X - 53, 4.7, 8], 4);
+  spawnStar('fridge', V3(X - 52, 11.3, 9.5), { silent: true });
+  npc('eggplant', 'Signora Melanzana', X - 46.5, 24.5, 4.2, () => G.stars.has('fridge') ? ['Brrr! You went all the way to the top shelf. I will stay down here, thank you.'] : [
+    'Psst, Capitano! This is the Chef\'s fridge. A Golden Star is on the top shelf.',
+    'Hop up the ice cubes from shelf to shelf. The shelves are icy, so you will slide!',
+    'The frozen fish need a ground pound before anything else hurts them. And the cracked ice cube will not hold you for long.',
+  ], { y: Y, eyes: { hf: 0.6 } });
 }
 
 const clouds = [];
@@ -2487,7 +2818,7 @@ function togglePause() {
   if (G.mode === 'play') {
     G.mode = 'pause'; sfx.pause(); document.exitPointerLock?.();
     const li = (id) => `<li class="${G.stars.has(id) ? 'got' : 'no'}">${G.stars.has(id) ? '★' : '☆'} ${STAR_NAMES[id]}</li>`;
-    const worlds = [['Garden Isle', STAR_ORDER, true], ['Isola Brace', STAR_ORDER2, world1Stars() >= 7], ['Mare Surgelato', STAR_ORDER3, world2Stars() >= 5], ['Dolceterra', STAR_ORDER4, world3Stars() >= 5]];
+    const worlds = [['Garden Isle', STAR_ORDER, true], ['Isola Brace', STAR_ORDER2, world1Stars() >= 7], ['Mare Surgelato', STAR_ORDER3, world2Stars() >= 5], ['Dolceterra', STAR_ORDER4, world3Stars() >= 5], ['La Grande Cucina', STAR_ORDER5, world4Stars() >= 5]];
     $('starlist').innerHTML = worlds.map(([name, order, open], i) => {
       if (!open && i + 1 !== G.world) return `<li class="hd">??? <span class="n">locked</span></li>`;
       const hd = `<li class="hd">${name} <span class="n">${starsIn(order)} / ${order.length}</span></li>`;
@@ -2529,10 +2860,10 @@ function frame() {
         if (G.mode === 'play' || G.mode === 'starget') updatePlayer(STEP_DT);
         for (const e of enemies) {
           if (e.gone) continue;
-          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else if (e.kind === 'ember') updateEmber(e, STEP_DT); else if (e.kind === 'tuna') updateTuna(e, STEP_DT); else if (e.kind === 'hopboss') updateHopBoss(e, STEP_DT); else updateBoss(e, STEP_DT);
+          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else if (e.kind === 'ember') updateEmber(e, STEP_DT); else if (e.kind === 'tuna') updateTuna(e, STEP_DT); else if (e.kind === 'hopboss') updateHopBoss(e, STEP_DT); else if (e.kind === 'cleaver') updateCleaver(e, STEP_DT); else updateBoss(e, STEP_DT);
         }
       }
-      updateFloes(dt); updateRun(dt); updateWinds(dt);
+      updateFloes(dt); updateRun(dt); updateWinds(dt); updateHobs(dt); updateChoppers(dt); updateSteams(dt);
       if (healQueue > 0) { G.healT = (G.healT || 0) - dt; if (G.healT <= 0) { G.healT = 0.12; healQueue--; if (G.health < 8) setHealth(G.health + 1); } }
     }
     if (G.mode === 'dialog') updateDialog(dt);
@@ -2541,6 +2872,10 @@ function frame() {
       if (G.starT > 2.8) {
         G.mode = 'play'; startAction('normal');
         if (G.stars.size >= TOTAL_STARS && !G.endingShown) { G.endingShown = true; G.mode = 'ending'; $('ending').style.display = 'flex'; document.exitPointerLock?.(); }
+        else if (world4Stars() >= 5 && !G.gate5Announced) {
+          G.gate5Announced = true; sfx.appear();
+          openDialog('The Kitchen Gate', ['The 5 Golden Stars of Dolceterra shine together… and somewhere a pot lid starts to rattle!', 'The steel Kitchen Gate on the arrival biscuit, next to the Candy Gate, has woken up.', 'Step through it to reach La Grande Cucina, the Giant Kitchen — the last 5 Golden Stars, and the Chef\'s cleaver, are waiting!']);
+        }
         else if (world3Stars() >= 5 && !G.gate4Announced) {
           G.gate4Announced = true; sfx.appear();
           openDialog('The Candy Gate', ['The 5 Golden Stars of Mare Surgelato shine together… and the cold air suddenly smells of vanilla!', 'The pink Candy Gate on the arrival floe, next to the Ice Gate, has woken up.', 'Step through it to reach Dolceterra, the Sugar Isles — 5 more Golden Stars are waiting there!']);
@@ -2596,7 +2931,7 @@ function frame() {
 // ---------------------------------------------------------------------------
 (async () => {
   try { await loadAll(); } catch (e) { $('loading').textContent = 'Failed to load models: ' + e.message; throw e; }
-  setupPlayerModel(); buildLevel(); buildWorld2(); buildWorld3(); buildWorld4(); drawHealth();
+  setupPlayerModel(); buildLevel(); buildWorld2(); buildWorld3(); buildWorld4(); buildWorld5(); drawHealth();
   // already-collected stars from a previous session: re-spawn as ghost stars only where they are fixed
   $('loading').style.display = 'none'; $('title').style.display = 'flex'; G.mode = 'title';
   window.__game = { G, player, enemies, items, solids, camState, input, travel, gates, floes, frozen, thaw };
