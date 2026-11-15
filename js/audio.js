@@ -87,12 +87,12 @@ const bass = [48, 55, 52, 55, 50, 57, 53, 57, 52, 55, 48, 52, 43, 50, 47, 50];
 
 function scheduleMusic() {
   if (!ctx) return;
-  const spb = 60 / (mood === 2 ? 118 : 132) / 4; // 16th notes
+  const spb = 60 / (mood === 2 ? 118 : mood === 3 ? 108 : 132) / 4; // 16th notes
   while (nextNoteTime < ctx.currentTime + 0.2) {
     const s = step % 64;
     const ln = lead[s];
     const dt = nextNoteTime - ctx.currentTime;
-    if (ln !== null) tone(N(mood === 2 ? minor(ln) : ln), spb * 1.8, { type: mood === 2 ? 'sawtooth' : 'square', vol: mood === 2 ? 0.09 : 0.12, dest: musicGain, delay: dt });
+    if (ln !== null) tone(N(mood === 2 ? minor(ln) : mood === 3 ? ln + 12 : ln), spb * 1.8, { type: mood === 2 ? 'sawtooth' : mood === 3 ? 'triangle' : 'square', vol: mood === 2 ? 0.09 : mood === 3 ? 0.2 : 0.12, dest: musicGain, delay: dt });
     if (s % 4 === 0) {
       const b = bass[(s / 4) | 0];
       tone(N(mood === 2 ? minor(b) : b), spb * 3.5, { type: 'triangle', vol: 0.35, dest: musicGain, delay: dt });

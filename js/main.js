@@ -13,7 +13,9 @@ const POND = { x: 38, z: 8, r: 14, level: -0.6 };
 const SPAWN = new THREE.Vector3(0, 0, 52);
 // World 2 (Isola Brace) lives far to the east in the same scene, floating in a sea of hot sauce
 const W2X = 2000, LAVA = -0.5;
-const lavaAt = (x) => (x > 1000 ? LAVA : null);
+// World 3 (Mare Surgelato) lives further east still: ice floes on a freezing sea you can swim in, briefly
+const W3X = 4000, COLD = -0.6;
+const lavaAt = (x) => (x > 1000 && x < 3000 ? LAVA : null);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
@@ -100,6 +102,23 @@ const texGriddle = canvasTex(32, (g, s) => { g.fillStyle = '#5b6170'; g.fillRect
 const matBasaltTop = new THREE.MeshLambertMaterial({ map: texBasaltTop });
 const matBasaltSide = new THREE.MeshLambertMaterial({ map: texBasaltSide, emissive: 0xaa4411, emissiveMap: texBasaltSide });
 const matGriddle = new THREE.MeshLambertMaterial({ map: texGriddle });
+// World 3 materials: snow, ice, the trawler, sushi belts and the wafer lighthouse
+const texSnow = canvasTex(64, (g, s) => speckle(g, s, '#f2f7ff', ['#e0ebfa', '#ffffff', '#d6e4f6'], 400));
+const iceLines = (g, s, col, n) => { g.strokeStyle = col; g.lineWidth = 1; for (let i = 0; i < n; i++) { const x = rand() * s, y = rand() * s; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 5 + rand() * 10, y - 3 - rand() * 8); g.lineTo(x + 9 + rand() * 12, y + rand() * 6); g.stroke(); } };
+const texIceTop = canvasTex(64, (g, s) => { speckle(g, s, '#a6dcf5', ['#94cfee', '#c0ecff', '#b2e4fa'], 300); iceLines(g, s, 'rgba(255,255,255,.75)', 7); });
+const texFloeTop = canvasTex(64, (g, s) => { speckle(g, s, '#dcf3fc', ['#c8e8f8', '#f0fbff', '#d0ecfa'], 300); iceLines(g, s, 'rgba(40,110,170,.8)', 9); });
+const texIceSide = canvasTex(64, (g, s) => speckle(g, s, '#78b8e2', ['#66a8d8', '#92cdf0', '#5898cc'], 400));
+const texHull = canvasTex(64, (g, s) => { speckle(g, s, '#8a2f2c', ['#7a2623', '#9a3a34', '#6c2220'], 300); g.fillStyle = '#e8e2d4'; g.fillRect(0, 0, s, 5); });
+const texDeck = canvasTex(64, (g, s) => { speckle(g, s, '#b98a56', ['#a97a48', '#c79a66', '#b08250'], 250); g.fillStyle = '#7a5630'; for (let x = 0; x < s; x += 16) g.fillRect(x, 0, 1, s); });
+const texBelt = canvasTex(32, (g, s) => { g.fillStyle = '#2c303a'; g.fillRect(0, 0, s, s); g.fillStyle = '#596070'; g.fillRect(3, 3, s - 6, s - 6); g.fillStyle = '#8a92a6'; g.fillRect(7, 7, s - 14, 4); g.fillRect(7, s - 11, s - 14, 4); });
+const texWafer = canvasTex(64, (g, s) => { g.fillStyle = '#e2b266'; g.fillRect(0, 0, s, s); g.strokeStyle = '#b98236'; g.lineWidth = 2; for (let i = -s; i < s * 2; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + s, s); g.stroke(); g.beginPath(); g.moveTo(i + s, 0); g.lineTo(i, s); g.stroke(); } });
+const matSnow = new THREE.MeshLambertMaterial({ map: texSnow });
+const matIceTop = new THREE.MeshLambertMaterial({ map: texIceTop });
+const matFloeTop = new THREE.MeshLambertMaterial({ map: texFloeTop });
+const matIceSide = new THREE.MeshLambertMaterial({ map: texIceSide });
+const matHull = new THREE.MeshLambertMaterial({ map: texHull });
+const matDeck = new THREE.MeshLambertMaterial({ map: texDeck });
+const six = (side, top) => [side, side, top, side, side, side];
 
 // ---------------------------------------------------------------------------
 // World: heightfield, solids, water
@@ -115,6 +134,7 @@ function groundHeight(x, z) {
   return h;
 }
 function waterLevelAt(x, z) {
+  if (x > 3000) return COLD;
   if (x > 1000) return null;
   if (Math.hypot(x - POND.x, z - POND.z) < POND.r) return POND.level;
   if (Math.hypot(x, z) > 69) return SEA;
@@ -181,14 +201,14 @@ function worldUVBox(w, h, d, cx, cy, cz, sc = 0.25) {
 }
 function terrainBox(x0, x1, y0, y1, z0, z1, { mat = 'grass' } = {}) {
   const w = x1 - x0, h = y1 - y0, d = z1 - z0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
-  const mats = mat === 'stone' ? matStone : mat === 'basalt' ? [matBasaltSide, matBasaltSide, matBasaltTop, matBasaltSide, matBasaltSide, matBasaltSide] : [matDirt, matDirt, matGrassTop, matDirt, matDirt, matDirt];
+  const mats = mat === 'stone' ? matStone : mat === 'basalt' ? six(matBasaltSide, matBasaltTop) : mat === 'snow' ? six(matIceSide, matSnow) : mat === 'ice' ? six(matIceSide, matIceTop) : mat === 'hull' ? six(matHull, matDeck) : six(matDirt, matGrassTop);
   const m = new THREE.Mesh(worldUVBox(w, h, d, cx, cy, cz), mats);
   m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m);
   if (mat === 'grass') {
     const lip = new THREE.Mesh(worldUVBox(w + 0.16, 0.3, d + 0.16, cx, y1 - 0.15, cz), matGrassTop);
     lip.position.set(cx, y1 - 0.15, cz); lip.receiveShadow = true; scene.add(lip);
   }
-  return addSolid({ x: x0, y: y0, z: z0 }, { x: x1, y: y1, z: z1 }, { mesh: m });
+  return addSolid({ x: x0, y: y0, z: z0 }, { x: x1, y: y1, z: z1 }, { mesh: m, ice: mat === 'ice' });
 }
 // Ramp: rises along axis toward dir (+1/-1) from lo to hi
 function ramp(x0, x1, z0, z1, base, lo, hi, axis, dir, mat = matGrassTop) {
@@ -270,8 +290,8 @@ function moveBody(b, dt) {
 // ---------------------------------------------------------------------------
 const loader = new GLTFLoader();
 const models = {};
-const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones', 'meat-ribs', 'whole-ham', 'sausage', 'lemon', 'pot-stew', 'frying-pan', 'bottle-ketchup'];
-const PLAT = ['tree', 'tree-pine', 'coin-gold', 'star', 'heart', 'spring', 'flag', 'platform', 'block-moving', 'block-moving-blue', 'crate', 'crate-item', 'rocks', 'fence-straight', 'flowers', 'flowers-tall', 'grass', 'hedge', 'mushrooms', 'plant', 'sign', 'stones', 'barrel', 'chest', 'pipe', 'poles'];
+const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones', 'meat-ribs', 'whole-ham', 'sausage', 'lemon', 'pot-stew', 'frying-pan', 'bottle-ketchup', 'maki-salmon', 'maki-roe', 'sushi-salmon', 'sushi-egg', 'rice-ball', 'celery-stick', 'avocado', 'ice-cream', 'popsicle', 'soy'];
+const PLAT = ['tree', 'tree-pine', 'coin-gold', 'star', 'heart', 'spring', 'flag', 'platform', 'block-moving', 'block-moving-blue', 'crate', 'crate-item', 'rocks', 'fence-straight', 'flowers', 'flowers-tall', 'grass', 'hedge', 'mushrooms', 'plant', 'sign', 'stones', 'barrel', 'chest', 'pipe', 'poles', 'tree-snow', 'tree-pine-snow'];
 function loadGLB(url) { return new Promise((res, rej) => loader.load(url, (g) => res(g.scene), undefined, rej)); }
 async function loadAll() {
   const jobs = [];
@@ -382,17 +402,25 @@ const STAR_NAMES = {
   skewer: 'Top of the Spiedino Spire',
   lemons: 'Eight Sunny Lemons',
   ribs: 'Rack of Ribs Roundup',
+  tuna: 'Il Tonno Padrino of the Frozen Trawler',
+  cono: 'Top of the Cono Lighthouse',
+  belt: 'The Sushi Belt Run',
+  peas: 'Eight Snow Peas',
+  thaw: 'Thaw the Frozen Villagers',
 };
 const STAR_ORDER = ['boss', 'tower', 'peppers', 'kids', 'fish', 'coins', 'steaks'];
 const STAR_ORDER2 = ['ham', 'crossing', 'skewer', 'lemons', 'ribs'];
-const TOTAL_STARS = STAR_ORDER.length + STAR_ORDER2.length;
-const world1Stars = () => STAR_ORDER.filter((id) => G.stars.has(id)).length;
+const STAR_ORDER3 = ['tuna', 'cono', 'belt', 'peas', 'thaw'];
+const TOTAL_STARS = STAR_ORDER.length + STAR_ORDER2.length + STAR_ORDER3.length;
+const starsIn = (order) => order.filter((id) => G.stars.has(id)).length;
+const world1Stars = () => starsIn(STAR_ORDER), world2Stars = () => starsIn(STAR_ORDER2);
 let saved = [];
 try { saved = JSON.parse(localStorage.getItem('pachino64') || '{}').stars || []; } catch (e) { saved = []; }
 const G = {
   mode: 'loading', stars: new Set(saved), coins: 0, lives: 4, health: 8, peppers: 0, kids: 0, fishKilled: 0, steaksKilled: 0,
   checkpoint: SPAWN.clone(), time: 0, healthShow: 0, coinStarSpawned: false, nextLifeAt: 50, endingShown: saved.length >= TOTAL_STARS,
   world: 1, lemons: 0, gateCool: 0, gateAnnounced: STAR_ORDER.every((id) => saved.includes(id)),
+  peas: 0, thawed: 0, coldT: 0, runT: 0, gate3Announced: STAR_ORDER2.every((id) => saved.includes(id)),
 };
 function saveGame() { try { localStorage.setItem('pachino64', JSON.stringify({ stars: [...G.stars] })); } catch (e) { /* storage blocked */ } }
 
@@ -403,6 +431,8 @@ function updateHUD(dt) {
   $('stars').textContent = G.stars.size; $('coins').textContent = G.coins; $('livesN').textContent = Math.max(0, G.lives);
   $('pepperN').textContent = G.peppers; $('peppers').style.display = G.world === 1 && G.peppers > 0 && G.peppers < 8 ? 'flex' : 'none';
   $('lemonN').textContent = G.lemons; $('lemons').style.display = G.world === 2 && G.lemons > 0 && G.lemons < 8 ? 'flex' : 'none';
+  $('peaN').textContent = G.peas; $('peas').style.display = G.world === 3 && G.peas > 0 && G.peas < 8 ? 'flex' : 'none';
+  $('timerN').textContent = Math.ceil(G.runT); $('timer').style.display = G.runT > 0 ? 'flex' : 'none';
   if (toastT > 0 && (toastT -= dt) <= 0) $('toast').classList.remove('show');
   if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').classList.remove('show');
   G.healthShow -= dt;
@@ -478,6 +508,11 @@ function collectItem(it) {
       toast(`Sunny Lemon ${G.lemons} / 8`);
       if (G.lemons === 8) spawnStar('lemons', new THREE.Vector3(W2X, 4.2, 26));
       break;
+    case 'pea':
+      G.peas++; sfx.redcoin(); burst(p, { n: 12, color: 0x8be060, speed: 4, life: 0.6 }); addCoins(2);
+      toast(`Snow Pea ${G.peas} / 8`);
+      if (G.peas === 8) spawnStar('peas', new THREE.Vector3(W3X + 3, 3.7, 13));
+      break;
     case 'heart': break;
     case 'star': collectStar(it.id); break;
     case 'kid': break;
@@ -489,7 +524,7 @@ function updateItems(dt) {
     it.t += dt;
     const m = it.mesh;
     if (it.type === 'coin') m.rotation.y += dt * 4;
-    else if (it.type === 'pepper' || it.type === 'lemon') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
+    else if (it.type === 'pepper' || it.type === 'lemon' || it.type === 'pea') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
     else if (it.type === 'star') { m.rotation.y += dt * 2.2; m.position.y = it.pos.y + Math.sin(it.t * 2) * 0.25; }
     else if (it.type === 'heart') {
       const near = player.pos.distanceTo(it.pos) < 2.2;
@@ -519,6 +554,7 @@ function breakCrate(c) {
   if (c.contents === 'coins') for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; coin(p.x + Math.cos(a) * 1.2, p.y + 0.2, p.z + Math.sin(a) * 1.2); }
   else if (c.contents === 'pepper') pepper(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'lemon') lemon(p.x, p.y + 0.3, p.z);
+  else if (c.contents === 'pea') pea(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'heart') heartPickup(p.x, p.y - 0.6, p.z);
 }
 const springs = [];
@@ -617,6 +653,8 @@ const STEAK_TYPES = {
   cooked: { model: 'meat-cooked', s: 3.2, speed: 5.6, r: 0.75, h: 1.8 },
   ribs: { model: 'meat-ribs', s: 4.4, speed: 3.6, r: 0.9, h: 1.7, armored: true },
   sausage: { model: 'sausage', s: 5, speed: 6.6, r: 0.55, h: 1.9 },
+  maki: { model: 'maki-salmon', s: 12, speed: 5, r: 0.75, h: 1.45, roller: true },    // aims, then rolls in a straight line
+  frozen: { model: 'fish', s: 3.3, speed: 2.4, r: 0.8, h: 2.1, iced: true },          // ground pound cracks the ice first
 };
 function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 } = {}) {
   type = type || (cooked ? 'cooked' : 'raw'); const T = STEAK_TYPES[type];
@@ -627,37 +665,48 @@ function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 }
   const body = inst(T.model, s);
   if (type === 'sausage') { body.rotation.z = Math.PI / 2; body.position.set(0.06 * s, 0.19 * s + 0.05, 0); }
   else if (type === 'ribs') { body.rotation.x = Math.PI / 2; body.position.y = 0.19 * s + 0.05; body.position.z = -0.1; }
+  else if (type === 'maki') { body.rotation.z = Math.PI / 2; body.position.x = 0.035 * s; }
+  else if (type === 'frozen') { body.rotation.x = -Math.PI / 2; body.position.set(0, 0.31 * s, 0.16 * s); }
   else { body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.05; body.position.z = -0.1; }
-  tilt.add(body);
-  addEyes(tilt, type === 'sausage' ? { hf: 0.74, size: 0.13, spread: 0.2, angry: true } : { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
+  let spin = null, ice = null;
+  if (type === 'maki') { spin = new THREE.Group(); spin.position.y = 0.06 * s; spin.add(body); tilt.add(spin); }
+  else if (type === 'frozen') { const turn = new THREE.Group(); turn.rotation.y = Math.PI / 2; turn.add(body); tilt.add(turn); }
+  else tilt.add(body);
+  addEyes(tilt, type === 'sausage' ? { hf: 0.74, size: 0.13, spread: 0.2, angry: true } : type === 'maki' ? { hf: 0.6, size: 0.13, spread: 0.16, angry: true } : type === 'frozen' ? { hf: 0.74, size: 0.1, spread: 0.13, angry: true } : { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
+  if (type === 'frozen') { ice = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.5, 1.7), matIceBlock); ice.position.y = 1.25; tilt.add(ice); }
   const e = {
-    kind: 'steak', type, w, armored: !!T.armored, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
+    kind: 'steak', type, w, armored: !!T.armored, roller: !!T.roller, iced: !!T.iced, spin, ice, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
     pos: root.position, vel: new THREE.Vector3(), r: T.r, h: T.h, onGround: true, alive: true, state: 'patrol', t: 0,
     target: new THREE.Vector3(x, gy, z), speed: T.speed, facing: rand() * 6, hop: 0,
   };
   enemies.push(e); return e;
 }
 // Ember fish: skeleton fish that leap out of the hot sauce in an arc. Hazard only.
-function ember(x, z, { period = 2.6, phase = 0, height = 4, dx = 0, dz = 0 } = {}) {
+function ember(x, z, { period = 2.6, phase = 0, height = 4, dx = 0, dz = 0, w = 2 } = {}) {
   const root = new THREE.Group(); scene.add(root);
-  const body = inst('fish-bones', 3.6, false); root.add(body);
-  body.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.color = new THREE.Color(0xffb060); c.material.emissive = new THREE.Color(0xff4a00); c.material.emissiveIntensity = 0.8; } });
-  const e = { kind: 'ember', root, body, pos: root.position, alive: true, state: 'swim', t: phase, period, height, x, z, dx, dz, r: 0.9, h: 1, up: false };
-  root.position.set(x, LAVA - 2, z); enemies.push(e); return e;
+  const body = inst(w === 3 ? 'fish' : 'fish-bones', w === 3 ? 3 : 3.6, false); root.add(body);
+  if (w === 2) body.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.color = new THREE.Color(0xffb060); c.material.emissive = new THREE.Color(0xff4a00); c.material.emissiveIntensity = 0.8; } });
+  const e = { kind: 'ember', root, body, pos: root.position, alive: true, state: 'swim', t: phase, period, height, x, z, dx, dz, r: 0.9, h: 1, up: false, w, sea: w === 3 ? COLD : LAVA, col: w === 3 ? 0x9fd8ff : 0xff9a2a, skip: -1 };
+  root.position.set(x, e.sea - 2, z); enemies.push(e); return e;
 }
 function updateEmber(e, dt) {
   e.t += dt;
   const j = ((e.t % e.period) / e.period) / 0.6;
-  const up = j < 1;
-  if (up !== e.up) { e.up = up; if (G.world === 2) burst(new THREE.Vector3(e.pos.x, LAVA + 0.1, e.pos.z), { n: 6, color: 0xff9a2a, speed: 3, life: 0.5, grav: 15, up: 4, size: 0.2 }); }
-  if (!up) { e.root.visible = false; e.pos.set(e.x, LAVA - 2, e.z); return; }
+  const up = j < 1 && Math.floor(e.t / e.period) !== e.skip;
+  if (up !== e.up) { e.up = up; if (G.world === e.w) burst(new THREE.Vector3(e.pos.x, e.sea + 0.1, e.pos.z), { n: 6, color: e.col, speed: 3, life: 0.5, grav: 15, up: 4, size: 0.2 }); }
+  if (!up) { e.root.visible = false; e.pos.set(e.x, e.sea - 2, e.z); return; }
   e.root.visible = true;
-  e.pos.set(e.x + e.dx * j, LAVA - 0.8 + e.height * 4 * j * (1 - j), e.z + e.dz * j);
+  e.pos.set(e.x + e.dx * j, e.sea - 0.8 + e.height * 4 * j * (1 - j), e.z + e.dz * j);
   e.root.rotation.y = (e.dx || e.dz) ? Math.atan2(e.dx, e.dz) : e.t * 2;
   e.body.rotation.x = -Math.cos(Math.PI * j) * ((e.dx || e.dz) ? 0.9 : 1.5);
   if (G.mode !== 'play' || player.dead) return;
   const d = Math.hypot(player.pos.x - e.pos.x, player.pos.z - e.pos.z), dy = player.pos.y + 0.8 - e.pos.y;
-  if (d < 1.15 && Math.abs(dy) < 1.3) hurtPlayer(1, e.pos);
+  if (d < 1.15 && Math.abs(dy) < 1.3) {
+    if (e.w === 3 && player.vel.y < 0 && dy > 0.35) { // flying fish can be bopped for a bounce; they come back next leap
+      e.skip = Math.floor(e.t / e.period); sfx.stomp(); player.bounce(13);
+      burst(e.pos.clone(), { n: 10, color: 0xffffff, speed: 5, size: 0.3, life: 0.5 });
+    } else hurtPlayer(1, e.pos);
+  }
 }
 function fish(i) {
   const root = new THREE.Group(); scene.add(root);
@@ -698,14 +747,14 @@ function killEnemy(e, how = 'stomp') {
   burst(p, { n: 16, color: 0xffffff, speed: 5, size: 0.35, life: 0.6 });
   if (e.kind === 'steak') {
     sfx.stomp(); G.steaksKilled++; e.state = 'dead'; e.t = 0;
-    coin(e.pos.x, Math.max(e.pos.y, e.w === 2 ? e.home.y : groundHeight(e.pos.x, e.pos.z)) + 0.6, e.pos.z);
+    coin(e.pos.x, Math.max(e.pos.y, e.w >= 2 ? e.home.y : groundHeight(e.pos.x, e.pos.z)) + 0.6, e.pos.z);
     if (e.w === 2) {
       if (e.armored) {
         const left = enemies.filter((x) => x.armored && x.alive).length;
         if (left === 0) spawnStar('ribs', new THREE.Vector3(W2X - 7, 4.2, 12));
         else toast(`Ribs left: ${left}`, 1.6);
       }
-    } else {
+    } else if (e.w === 1) {
       const left = enemies.filter((x) => x.kind === 'steak' && x.w === 1 && x.alive).length;
       if (left === 0) { spawnStar('steaks', new THREE.Vector3(7, 3.2, 10)); }
       else toast(`Steaks left: ${left}`, 1.6);
@@ -738,6 +787,17 @@ function updateSteak(e, dt) {
   } else if (e.state === 'notice') {
     tx = player.pos.x; tz = player.pos.z; speed = 0;
     if (e.t > 0.45) { e.state = 'chase'; e.t = 0; }
+  } else if (e.state === 'chase' && e.roller) {
+    e.state = 'aim'; e.t = 0;
+  } else if (e.state === 'aim') {
+    tx = player.pos.x; tz = player.pos.z; speed = 0; e.tilt.position.x = Math.sin(e.t * 50) * 0.06;
+    if (dp > 16 || Math.abs(dy) > 4) { e.state = 'return'; e.tilt.position.x = 0; }
+    else if (e.t > 0.75) { e.state = 'roll'; e.t = 0; e.tilt.position.x = 0; if (dp < 14) sfx.longjump(); }
+  } else if (e.state === 'roll') {
+    tx = e.pos.x + Math.sin(e.facing) * 10; tz = e.pos.z + Math.cos(e.facing) * 10; speed = 11;
+    if (e.t > 1.15) { e.state = 'rest'; e.t = 0; }
+  } else if (e.state === 'rest') {
+    if (e.t > 1.1) { e.state = dp < 15 ? 'aim' : 'return'; e.t = 0; }
   } else if (e.state === 'chase') {
     tx = player.pos.x; tz = player.pos.z; speed = e.speed;
     if (dp > 15 || homeD > e.range + 12 || Math.abs(dy) > 4) { e.state = 'return'; }
@@ -747,33 +807,46 @@ function updateSteak(e, dt) {
   } else if (e.state === 'knock') {
     speed = 0; if (e.onGround && e.t > 0.3) { e.state = 'chase'; e.t = 0; }
   }
-  if (e.state !== 'knock') {
+  if (e.state === 'rest') { e.vel.x *= 1 - dt * 1.5; e.vel.z *= 1 - dt * 1.5; speed = Math.hypot(e.vel.x, e.vel.z); } // keeps sliding, even off the edge
+  else if (e.state !== 'knock') {
     const want = Math.atan2(tx - e.pos.x, tz - e.pos.z);
     e.facing += angDiff(e.facing, want) * Math.min(1, dt * 6);
     // edge check: don't walk off ledges
     const ax = e.pos.x + Math.sin(e.facing) * 1.2, az = e.pos.z + Math.cos(e.facing) * 1.2;
     const ahead = floorAt(ax, az, e.pos.y, 0.3).y;
-    if (ahead < e.pos.y - 1.2 || waterLevelAt(ax, az) !== null) { speed = 0; if (e.state === 'patrol') e.t = 5; }
+    if (e.state !== 'roll' && (ahead < e.pos.y - 1.2 || (e.w !== 3 && waterLevelAt(ax, az) !== null))) { speed = 0; if (e.state === 'patrol') e.t = 5; }
     e.vel.x = Math.sin(e.facing) * speed; e.vel.z = Math.cos(e.facing) * speed;
   } else { e.vel.x *= 1 - dt * 2; e.vel.z *= 1 - dt * 2; }
   e.vel.y = Math.max(e.vel.y - GRAV * dt, -MAX_FALL);
   moveBody(e, dt);
   if (e.pos.y < -20) { e.pos.copy(e.home); e.vel.set(0, 0, 0); }
   if (e.w === 2 && e.pos.y < LAVA) { burst(e.pos.clone().setY(LAVA + 0.2), { n: 14, color: 0xff9a2a, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // sizzled in the sauce
+  if (e.w === 3 && e.pos.y < COLD - 0.3) { burst(e.pos.clone().setY(COLD + 0.2), { n: 14, color: 0x9fd8ff, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // plop
   // waddle hop animation
   e.hop += dt * (speed > 2 ? 12 : 7);
   e.root.rotation.y = e.facing;
   e.tilt.position.y = e.onGround ? Math.abs(Math.sin(e.hop)) * (speed > 0 ? 0.35 : 0.1) : 0;
   e.tilt.rotation.z = Math.sin(e.hop) * 0.12; e.tilt.rotation.x = speed > 3 ? 0.18 : 0;
+  if (e.spin) { e.spin.rotation.x += Math.hypot(e.vel.x, e.vel.z) * dt / 0.72; e.tilt.position.y = 0; e.tilt.rotation.z = 0; e.tilt.rotation.x = 0; }
   // interaction with the player
   if (G.mode !== 'play' || player.dead) return;
   const dx = player.pos.x - e.pos.x, dz = player.pos.z - e.pos.z, hd = Math.hypot(dx, dz);
   if (hd < e.r + player.r + 0.15 && dy > -1.5 && dy < e.h) {
-    if (player.vel.y < 0 && dy > e.h * 0.45) { killEnemy(e); player.bounce(player.action === 'gpFall' ? 8 : 12); }
+    if (e.iced) {
+      if (player.action === 'gpFall') { crackIce(e); player.bounce(9); }
+      else if (player.vel.y < 0 && dy > e.h * 0.45) { player.bounce(12); sfx.hit(); toast('Frozen solid! Ground pound it to crack the ice!', 1.8); }
+      else hurtPlayer(1, e.pos);
+    }
+    else if (player.vel.y < 0 && dy > e.h * 0.45) { killEnemy(e); player.bounce(player.action === 'gpFall' ? 8 : 12); }
     else if (player.action === 'gpFall') killEnemy(e);
     else if (player.action === 'longjump' && player.vel.y < 0) killEnemy(e); // belly slide hit
     else hurtPlayer(1, e.pos);
   }
+}
+function crackIce(e) {
+  e.iced = false; e.tilt.remove(e.ice); e.speed = 5.4; e.state = 'knock'; e.t = 0; e.onGround = false; e.vel.set(0, 6, 0); sfx.crate();
+  burst(e.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), { n: 16, color: 0xc8ecff, speed: 6, size: 0.3, grav: 20, life: 0.7, up: 5 });
+  toast('Crack! Now finish it off!', 1.6);
 }
 function updateFish(e, dt) {
   if (!e.alive) {
@@ -1007,7 +1080,7 @@ function updatePlayer(dt) {
     const target = water - 0.75; p.vel.y = lerp(p.vel.y, (target - p.pos.y) * 4, dt * 6);
     const sp = 4.5; p.vel.x = lerp(p.vel.x, mx * mag * sp, dt * 4); p.vel.z = lerp(p.vel.z, mz * mag * sp, dt * 4);
     if (mag > 0.1) p.facing += angDiff(p.facing, Math.atan2(mx, mz)) * Math.min(1, dt * 8);
-    if (p.jumpBuf > 0) { p.vel.y = 12; p.jumpBuf = 0; sfx.splash(); burst(p.pos, { n: 8, color: 0x9fd8ff, speed: 3, grav: 15, up: 4 }); startAction('jump'); p.jumpKind = 1; }
+    if (p.jumpBuf > 0) { p.vel.y = G.world === 3 ? 14 : 12; p.cutJump = G.world === 3; p.jumpBuf = 0; sfx.splash(); burst(p.pos, { n: 8, color: 0x9fd8ff, speed: 3, grav: 15, up: 4 }); startAction('jump'); p.jumpKind = 1; }
     if (Math.random() < dt * 6 && mag > 0.1) burst(p.pos.clone().setY(water), { n: 1, color: 0xffffff, speed: 1, life: 0.4, size: 0.2 });
   } else if (p.action === 'gpStart') {
     p.vel.set(0, 0, 0); if (p.at > 0.28) { startAction('gpFall'); p.vel.y = -30; }
@@ -1018,19 +1091,20 @@ function updatePlayer(dt) {
   } else if (p.action === 'hurt') {
     if (p.onGround && p.at > 0.2) startAction('normal');
   } else if (p.action === 'slash') {
-    const f = p.onGround ? 1 - Math.min(1, dt * 10) : 1; p.vel.x *= f; p.vel.z *= f;
+    const f = p.onGround ? 1 - Math.min(1, dt * (p.ground && p.ground.ice ? 1.5 : 10)) : 1; p.vel.x *= f; p.vel.z *= f;
     if (p.at > 0.06 && !p.slashHit) { p.slashHit = true; slashHits(); }
     if (p.at > 0.3) startAction('normal');
   } else {
     // movement
     const air = !p.onGround;
     p.crouching = p.onGround && input.crouch;
-    let maxS = RUN * mag, accel = air ? 16 : 45;
-    if (p.crouching) { maxS = 0; accel = 12; }
+    const icy = !air && p.ground && p.ground.ice;
+    let maxS = RUN * mag, accel = air ? 16 : icy ? 8 : 45;
+    if (p.crouching) { maxS = 0; accel = icy ? 4 : 12; }
     if (p.action === 'longjump') { accel = 3; maxS = Math.max(hs, 4); }
     if (p.action === 'backflip') accel = 6;
     const tvx = mx * maxS, tvz = mz * maxS;
-    if (!air && mag > 0.1 && hs > 6 && Math.abs(angDiff(Math.atan2(p.vel.x, p.vel.z), Math.atan2(mx, mz))) > 2.4) {
+    if (!air && !icy && mag > 0.1 && hs > 6 && Math.abs(angDiff(Math.atan2(p.vel.x, p.vel.z), Math.atan2(mx, mz))) > 2.4) {
       // skid turn
       p.vel.x *= 1 - dt * 12; p.vel.z *= 1 - dt * 12; if (Math.random() < 0.5) burst(p.pos, { n: 1, color: 0xd8c8a8, speed: 2, life: 0.4 });
     } else {
@@ -1068,6 +1142,19 @@ function updatePlayer(dt) {
 
   // carried by moving platform
   if (p.onGround && p.ground && p.ground.vel) p.pos.add(p.ground.vel);
+  if (p.onGround && p.ground && p.ground.belt) { p.pos.x += p.ground.belt.x * dt; p.pos.z += p.ground.belt.z * dt; }
+  for (const w of winds) if (windOn(w) && p.pos.x > w.min.x && p.pos.x < w.max.x && p.pos.y > w.min.y && p.pos.y < w.max.y && p.pos.z > w.min.z && p.pos.z < w.max.z) {
+    const k = (p.onGround ? 0.4 : 1) * dt; p.pos.x += w.dir.x * k; p.pos.z += w.dir.z * k;
+  }
+  // freezing water: you can swim, but not for long
+  if (G.world === 3 && p.swimming && G.mode === 'play') {
+    G.coldT += dt;
+    if (G.coldT > 1.6) {
+      G.coldT = 0; setHealth(G.health - 1); sfx.hurt(); toast('Brrr! The water is freezing — get out!', 1.6);
+      burst(p.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 8, color: 0xc8ecff, speed: 4, life: 0.5 });
+      if (G.health <= 0) killPlayer();
+    }
+  } else G.coldT = Math.max(0, G.coldT - dt * 2);
 
   const wasGround = p.onGround;
   moveBody(p, dt);
@@ -1081,6 +1168,7 @@ function updatePlayer(dt) {
         startAction('gpLand'); sfx.pound(); ringFx(p.pos, { max: 2.6 }); shake = 0.2;
         burst(p.pos, { n: 10, color: 0xe8dcc0, speed: 5, life: 0.5 });
         if (p.ground && p.ground.crate) breakCrate(p.ground.crate);
+        for (const f of frozen) if (!f.done && Math.hypot(f.pos.x - p.pos.x, f.pos.z - p.pos.z) < 2.9 && p.pos.y - f.pos.y > -0.5 && p.pos.y - f.pos.y < f.h + 0.5) thaw(f);
         for (const c of crates) if (c.alive && Math.hypot(c.o.position.x - p.pos.x, c.o.position.z - p.pos.z) < 2.6 && Math.abs(c.o.position.y - p.pos.y) < 1.5) breakCrate(c);
       } else if (['jump', 'jump3', 'backflip', 'longjump', 'slash'].includes(p.action)) startAction('normal');
       if (p.ground && p.ground.spring) {
@@ -1088,12 +1176,12 @@ function updatePlayer(dt) {
       }
     }
     if (p.jumpKind && G.time - p.lastLand > 0.22) p.jumpKind = 0;
-    if (!water || p.floorY > (water ?? -99)) { if (!p.ground || !p.ground.vel) p.lastSafe.copy(p.pos); }
+    if (!water || p.floorY > (water ?? -99)) { if (!p.ground || !(p.ground.vel || p.ground.belt || p.ground.floe)) p.lastSafe.copy(p.pos); }
   }
   // fell into the void
   if (p.pos.y < -25) { hurtPlayer(2, p.pos); p.pos.copy(p.lastSafe).add(new THREE.Vector3(0, 2, 0)); p.vel.set(0, 0, 0); }
   // keep in world bounds (sea)
-  const wcx = G.world === 2 ? W2X : 0, wR = G.world === 2 ? 92 : 100;
+  const wcx = G.world === 3 ? W3X : G.world === 2 ? W2X : 0, wR = G.world === 3 ? 96 : G.world === 2 ? 92 : 100;
   const rr = Math.hypot(p.pos.x - wcx, p.pos.z); if (rr > wR) { p.pos.x = wcx + (p.pos.x - wcx) * wR / rr; p.pos.z *= wR / rr; }
   // hot sauce: ouch, and a big bounce so you can steer back to land
   if (G.world === 2 && p.pos.y < LAVA + 0.1 && G.mode === 'play') {
@@ -1121,12 +1209,14 @@ function slashHits() {
   for (const e of enemies) {
     if (!e.alive || e.state === 'swim') continue;
     const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz), dy = e.pos.y - p.pos.y;
-    const reach = (e.kind === 'boss' ? e.r + 2 : 2.6);
+    const reach = (e.kind === 'boss' || e.kind === 'tuna' ? e.r + 2 : 2.6);
     if (d > reach || dy > 2 || dy < -(e.h || 1.5)) continue;
     if (!spin && d > 0.8 && (dx * fx + dz * fz) / d < 0.2) continue;
+    if (e.kind === 'ember') continue;
+    if (e.kind === 'tuna') { if (e.state === 'flop') { sfx.hit(); toast('His scales are too slippery — ground pound him!', 1.8); } continue; }
     if (e.kind === 'boss') { if (e.state === 'stunned') hitBoss(e); else { sfx.hit(); toast('Too tough! Make him dizzy first!', 1.5); } }
-    else if (e.armored) { // swords bounce off the bones
-      sfx.hit(); toast('Clang! Too bony for a sword — stomp it!', 1.6);
+    else if (e.armored || e.iced) { // swords bounce off bones and ice
+      sfx.hit(); toast(e.iced ? 'Clink! Frozen solid — ground pound it!' : 'Clang! Too bony for a sword — stomp it!', 1.6);
       e.state = 'knock'; e.t = 0; e.onGround = false; e.vel.set(dx / (d || 1) * 8, 6.5, dz / (d || 1) * 8);
       burst(e.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 6, color: 0xffffff, speed: 4, life: 0.3 });
     }
@@ -1179,7 +1269,7 @@ function animatePlayer(dt) {
 // ---------------------------------------------------------------------------
 function collectStar(id) {
   const first = !G.stars.has(id);
-  G.stars.add(id); saveGame(); delete starMeshes[id];
+  G.stars.add(id); saveGame(); delete starMeshes[id]; if (id === 'belt') G.runT = 0;
   G.mode = 'starget'; G.starT = 0; startAction('star'); player.vel.set(0, 0, 0);
   sfx.star(); setHealth(8);
   burst(player.pos.clone().add(new THREE.Vector3(0, 1.5, 0)), { n: 40, color: 0xffe066, speed: 9, life: 1.2 });
@@ -1370,6 +1460,7 @@ function buildLevel() {
 const gates = [];
 const gateGold = new THREE.MeshStandardMaterial({ color: 0xffc928, metalness: 0.6, roughness: 0.3, emissive: 0x553300 });
 const gateStone = new THREE.MeshLambertMaterial({ color: 0x8a8590 });
+const gateIce = new THREE.MeshStandardMaterial({ color: 0x9fe4ff, metalness: 0.5, roughness: 0.25, emissive: 0x114466 });
 const gemOn = new THREE.MeshBasicMaterial({ color: 0xffe066 }), gemOff = new THREE.MeshLambertMaterial({ color: 0x4a4658 });
 const texSwirl = canvasTex(128, (g, s) => {
   g.fillStyle = '#000'; g.fillRect(0, 0, s, s); g.lineCap = 'round';
@@ -1381,8 +1472,8 @@ const texSwirl = canvasTex(128, (g, s) => {
     g.stroke();
   }
 }, false);
-function makeGate(x, y, z, to, needs) {
-  const root = new THREE.Group(); root.position.set(x, y, z); scene.add(root);
+function makeGate(x, y, z, to, needs, { count = world1Stars, rot = 0, name = 'Star Gate', gold = gateGold } = {}) {
+  const root = new THREE.Group(); root.position.set(x, y, z); root.rotation.y = rot; scene.add(root);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.32, 10, 40), gateStone); ring.position.y = 2.2; ring.castShadow = true; root.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(2.15, 40), new THREE.MeshBasicMaterial({ map: texSwirl, transparent: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
   disc.position.y = 2.2; root.add(disc);
@@ -1392,13 +1483,13 @@ function makeGate(x, y, z, to, needs) {
     const a = lerp(2.75, 0.39, i / Math.max(1, needs - 1));
     const gm = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), gemOff); gm.scale.z = 2; gm.position.set(Math.cos(a) * 2.3, 2.2 + Math.sin(a) * 2.3, 0); root.add(gm); sockets.push(gm);
   }
-  const g = { root, ring, disc, sockets, pos: root.position, to, needs, hintT: 0, open: false }; gates.push(g); return g;
+  const g = { root, ring, disc, sockets, pos: root.position, to, needs, count, name, gold, hintT: 0, open: false }; gates.push(g); return g;
 }
 function updateGates(dt) {
-  const n1 = world1Stars(); G.gateCool -= dt;
+  G.gateCool -= dt;
   for (const g of gates) {
-    const open = n1 >= g.needs; g.open = open;
-    g.disc.visible = open; g.disc.rotation.z -= dt * 1.6; g.ring.material = open ? gateGold : gateStone;
+    const n1 = g.count(), open = n1 >= g.needs; g.open = open;
+    g.disc.visible = open; g.disc.rotation.z -= dt * 1.6; g.ring.material = open ? g.gold : gateStone;
     g.sockets.forEach((m, i) => { m.material = i < n1 ? gemOn : gemOff; m.rotation.z += dt * (i < n1 ? 2 : 0); });
     if (G.mode !== 'play') continue;
     const d = Math.hypot(player.pos.x - g.pos.x, player.pos.z - g.pos.z), dy = player.pos.y - g.pos.y;
@@ -1406,12 +1497,13 @@ function updateGates(dt) {
     if (open) {
       if (Math.random() < dt * 10) burst(new THREE.Vector3(g.pos.x + (Math.random() - 0.5) * 3.4, g.pos.y + 0.6 + Math.random() * 3.4, g.pos.z), { n: 1, color: 0x9fd8ff, speed: 0.8, size: 0.14, life: 0.8, up: 1 });
       if (d < 1.5 && G.gateCool <= 0) travel(g.to);
-    } else if ((g.hintT -= dt) <= 0) { g.hintT = 5; toast(`The Star Gate sleeps… ${n1} / ${g.needs} Golden Stars`, 2.6); }
+    } else if ((g.hintT -= dt) <= 0) { g.hintT = 5; toast(`The ${g.name} sleeps… ${n1} / ${g.needs} Golden Stars${g.to === 3 ? ' of Isola Brace' : ''}`, 2.6); }
   }
 }
 const ENV = {
   1: { top: 0x3a8cf0, bottom: 0xcfe9ff, fogN: 90, fogF: 300, sky: 0xeaf6ff, gnd: 0x5d7a3a, hemiI: 1.6, sun: 0xfff2dd, sunI: 2.4 },
   2: { top: 0x2a1446, bottom: 0xff9a55, fogN: 60, fogF: 250, sky: 0xffc9a0, gnd: 0x7a3010, hemiI: 1.5, sun: 0xffb880, sunI: 2.1 },
+  3: { top: 0x0e1650, bottom: 0x7fd0de, fogN: 70, fogF: 280, sky: 0xd8f0ff, gnd: 0x6a8cc0, hemiI: 1.7, sun: 0xdfe8ff, sunI: 1.9 },
 };
 function setEnv(w) {
   const e = ENV[w], u = scene.userData.sky.material.uniforms;
@@ -1419,7 +1511,7 @@ function setEnv(w) {
   hemi.color.set(e.sky); hemi.groundColor.set(e.gnd); hemi.intensity = e.hemiI; sun.color.set(e.sun); sun.intensity = e.sunI;
   setMusicMood(w);
 }
-const ARRIVE = { 1: new THREE.Vector3(0, 0.2, 49), 2: new THREE.Vector3(W2X, 1.2, 45) };
+const ARRIVE = { 1: new THREE.Vector3(0, 0.2, 49), 2: new THREE.Vector3(W2X, 1.2, 45), 3: new THREE.Vector3(W3X, 0.6, 45) };
 function travel(to) {
   if (G.mode !== 'play') return;
   G.mode = 'travel'; G.travelT = 0; G.travelTo = to; G.travelDone = false; sfx.appear(); $('fade').classList.add('on');
@@ -1456,6 +1548,7 @@ function buildWorld2() {
   // --- Arrival dock (south) ---
   terrainBox(X - 8, X + 8, -4, 1, 40, 62, B);
   makeGate(X, 1, 59.5, 1, 0);
+  makeGate(X - 6.3, 1, 51, 3, 5, { count: world2Stars, rot: Math.PI / 2, name: 'Ice Gate', gold: gateIce });
   place('barrel', X - 6, 1, 42, { s: 2.4, solid: true }); place('rocks', X + 6.3, 1, 60, { s: 2.5, solid: true, shrink: 0.3 }); place('sign', X + 3, 1, 41, { s: 2.5 });
   lemon(X - 6, 2.2, 60);
   npc('radish', 'Ravanello the Scout', X + 5, 44.5, 4, [
@@ -1557,6 +1650,376 @@ function buildWorld2() {
     'Hop from the stone ledges onto the griddle plates that circle the spire.',
     'High up on the east side a lift carries you the rest of the way. Buona fortuna!',
   ], { y: 1, eyes: { hf: 0.5 } });
+}
+
+// ---------------------------------------------------------------------------
+// World 3: Mare Surgelato, the Frozen Sea
+// ---------------------------------------------------------------------------
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const matIceBlock = new THREE.MeshLambertMaterial({ color: 0xbfeaff, transparent: true, opacity: 0.5 });
+const peaPod = new THREE.MeshLambertMaterial({ color: 0x58c040 }), peaBall = new THREE.MeshLambertMaterial({ color: 0xa8f070 });
+function pea(x, y, z) {
+  const m = new THREE.Group(), pod = new THREE.Group(); m.add(pod); pod.rotation.z = 0.5; pod.position.y = 0.45;
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 8), peaPod); shell.scale.set(1.7, 0.42, 0.55); pod.add(shell);
+  for (let i = -1; i <= 1; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), peaBall); b.position.set(i * 0.42, 0.12, 0); pod.add(b); }
+  return addItem('pea', m, V3(x, y, z));
+}
+// a woolly scarf for a vegetable friend
+function scarf(n, color = 0xe8352b) {
+  const mat = new THREE.MeshLambertMaterial({ color }), r = n.rad * 1.05;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r, Math.max(0.1, r * 0.2), 8, 20), mat); ring.rotation.x = Math.PI / 2; ring.position.y = n.h * 0.4; n.root.add(ring);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.2, r * 0.45), n.h * 0.28, 0.14), mat); tail.position.set(r * 0.5, n.h * 0.27, r * 1.0); n.root.add(tail);
+  return n;
+}
+// Cracking floes: break a moment after you land on them, grow back later
+const floes = [];
+function floe(x, top, z, w = 3, d = 3) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, d), six(matIceSide, matFloeTop)); m.position.set(x, top - 0.35, z); m.castShadow = m.receiveShadow = true; scene.add(m);
+  const sd = addSolid({ x: x - w / 2, y: top - 0.7, z: z - d / 2 }, { x: x + w / 2, y: top, z: z + d / 2 }, { floe: true });
+  floes.push({ m, sd, x, z, y: top, t: 0, state: 'idle' });
+}
+function updateFloes(dt) {
+  for (const f of floes) {
+    f.t += dt;
+    if (f.state === 'idle') {
+      if (f.m.scale.x < 1) f.m.scale.setScalar(Math.min(1, f.m.scale.x + dt * 3));
+      if (player.onGround && player.ground === f.sd) { f.state = 'shake'; f.t = 0; sfx.talk(); }
+    } else if (f.state === 'shake') {
+      f.m.position.x = f.x + Math.sin(f.t * 55) * 0.05; f.m.rotation.z = Math.sin(f.t * 40) * 0.025;
+      if (f.t > 0.9) {
+        f.state = 'gone'; f.t = 0; f.m.visible = false; f.sd.min.y -= 500; f.sd.max.y -= 500; sfx.crate();
+        burst(V3(f.x, f.y, f.z), { n: 12, color: 0xc8ecff, speed: 5, size: 0.3, grav: 20, life: 0.7, up: 4 });
+      }
+    } else if (f.t > 3.5 && Math.hypot(player.pos.x - f.x, player.pos.z - f.z) > 3.2) {
+      f.state = 'idle'; f.m.visible = true; f.m.position.x = f.x; f.m.rotation.z = 0; f.m.scale.setScalar(0.2); f.sd.min.y += 500; f.sd.max.y += 500;
+    }
+  }
+}
+// Conveyor belts: carry whoever stands on them
+const belts = [];
+const matBeltSide = new THREE.MeshLambertMaterial({ color: 0x3a3f4b });
+function belt(x0, x1, z0, z1, top, vx, vz) {
+  const w = x1 - x0, d = z1 - z0, tex = texBelt.clone(); tex.needsUpdate = true; tex.repeat.set(w / 2, d / 2);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.8, d), six(matBeltSide, new THREE.MeshLambertMaterial({ map: tex })));
+  m.position.set((x0 + x1) / 2, top - 0.4, (z0 + z1) / 2); m.castShadow = m.receiveShadow = true; scene.add(m);
+  addSolid({ x: x0, y: top - 0.8, z: z0 }, { x: x1, y: top, z: z1 }, { belt: { x: vx, z: vz } });
+  belts.push({ tex, vx, vz });
+}
+// Timed run: a button starts the clock and makes a star appear at the far end
+const run = { pad: null, end: null, btn: null, T: 20 };
+function runPad(x, y, z, end) {
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.45, 0.16, 20), matStone); base.position.set(x, y + 0.08, z); base.receiveShadow = true; scene.add(base);
+  const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.3, 20), new THREE.MeshLambertMaterial({ color: 0xe8352b, emissive: 0x551008 })); btn.position.set(x, y + 0.16, z); scene.add(btn);
+  run.pad = V3(x, y, z); run.end = end; run.btn = btn;
+}
+function updateRun(dt) {
+  if (!run.pad) return;
+  if (G.runT > 0) {
+    G.runT -= dt; run.btn.scale.y = 0.3;
+    if (G.runT <= 0) {
+      G.runT = 0; const it = starMeshes.belt; if (it) { it.active = false; scene.remove(it.mesh); delete starMeshes.belt; }
+      if (G.world === 3) { toast("Time's up! Press the red button to try again.", 3); sfx.hurt(); }
+    }
+  } else {
+    run.btn.scale.y = 1;
+    if (G.mode === 'play' && player.onGround && Math.hypot(player.pos.x - run.pad.x, player.pos.z - run.pad.z) < 1.2 && Math.abs(player.pos.y - run.pad.y) < 1) {
+      G.runT = run.T; spawnStar('belt', run.end, { silent: true }); sfx.appear(); toast('GO! Grab the star at the end of the belts before time runs out!', 3);
+    }
+  }
+}
+// Wind gusts: push the player sideways for a moment, every few seconds
+const winds = [];
+function windZone(min, max, dir, period = 5.5, onT = 1.8) { winds.push({ min, max, dir, period, onT, was: false }); }
+const windOn = (w) => (G.time % w.period) < w.onT;
+function updateWinds(dt) {
+  for (const w of winds) {
+    const on = windOn(w), near = G.world === 3 && player.pos.x > w.min.x - 14 && player.pos.x < w.max.x + 14 && player.pos.z > w.min.z - 14 && player.pos.z < w.max.z + 14;
+    if (on && !w.was && near) sfx.slash();
+    w.was = on;
+    if (!on || !near) continue;
+    for (let k = 0; k < 3; k++) if (Math.random() < dt * 25) {
+      const m = new THREE.Mesh(pGeo, pMat(0xffffff)); m.position.set(lerp(w.min.x, w.max.x, Math.random()), lerp(w.min.y, w.max.y, Math.random()), lerp(w.min.z, w.max.z, Math.random())); scene.add(m);
+      particles.push({ m, v: V3(w.dir.x * 3.5, 0, w.dir.z * 3.5), life: 0.7, max: 0.7, size: 0.17, grav: 0 });
+    }
+  }
+}
+// Frozen villagers: vegetables stuck in ice blocks, freed with a ground pound
+const frozen = [];
+function frozenVillager(model, s, x, y, z, name) {
+  const veg = inst(model, s); veg.position.set(x, y, z); scene.add(veg); addEyes(veg, { size: 0.12, hf: 0.55 });
+  veg.updateWorldMatrix(true, true); const sz = new THREE.Box3().setFromObject(veg).getSize(new THREE.Vector3());
+  const w = Math.max(sz.x, sz.z) + 0.7, h = sz.y + 0.5;
+  const ice = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), matIceBlock); ice.position.set(x, y + h / 2, z); scene.add(ice);
+  const sd = addSolid({ x: x - w / 2, y, z: z - w / 2 }, { x: x + w / 2, y: y + h, z: z + w / 2 }, { ice: true });
+  const f = { veg, ice, sd, name, pos: V3(x, y, z), h, done: false, t: 0 }; frozen.push(f); return f;
+}
+function thaw(f) {
+  if (f.done) return; f.done = true; scene.remove(f.ice); removeSolid(f.sd); sfx.crate(); sfx.redcoin(); G.thawed++;
+  burst(f.pos.clone().add(V3(0, f.h / 2, 0)), { n: 20, color: 0xc8ecff, speed: 7, size: 0.35, grav: 20, life: 0.8, up: 6 });
+  toast(`"Grazie, Capitano!" ${f.name} is free (${G.thawed} / 5)`, 2.4);
+  if (G.thawed === 5) spawnStar('thaw', V3(W3X - 3, 3.7, 13));
+}
+// Boss: Il Tonno Padrino. Swims under the ice (watch the shadow), bursts up where you stand,
+// then flops on the ice for a moment — that is when a ground pound hurts him.
+function makeTuna(x, y, z, arena) {
+  const root = new THREE.Group(); root.position.set(x, y + 1.44, z); scene.add(root);
+  const tilt = new THREE.Group(); root.add(tilt);
+  const s = 9, body = inst('fish', s); body.position.y = -0.16 * s; tilt.add(body);   // 5.6 long (z), 2.9 tall, 1.8 thick, centred on the pivot
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(eyeGeo, eyeWhite); eye.scale.setScalar(0.34); eye.position.set(side * 0.62, 0.45, 1.75); tilt.add(eye);
+    const pupil = new THREE.Mesh(eyeGeo, eyeBlack); pupil.scale.setScalar(0.5); pupil.position.set(side * 0.55, 0, 0.45); eye.add(pupil);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.8), eyeBlack); brow.position.set(side * 0.7, 0.86, 1.75); brow.rotation.x = -0.4; tilt.add(brow);
+  }
+  const crown = new THREE.Group(); const gold = new THREE.MeshStandardMaterial({ color: 0xffc928, metalness: 0.6, roughness: 0.3 });
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.4, 14, 1, true), gold); band.material.side = THREE.DoubleSide; crown.add(band);
+  for (let i = 0; i < 6; i++) { const sp = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 6), gold); const a = (i / 6) * Math.PI * 2; sp.position.set(Math.cos(a) * 0.72, 0.45, Math.sin(a) * 0.72); crown.add(sp); }
+  crown.position.set(0, 1.62, 1.0); crown.traverse((c) => c.isMesh && (c.castShadow = true)); tilt.add(crown);
+  const dizzy = new THREE.Group(); for (let i = 0; i < 3; i++) { const st = inst('star', 1.7, false); st.position.set(Math.cos(i * 2.1) * 1.8, 0, Math.sin(i * 2.1) * 1.8); dizzy.add(st); }
+  dizzy.position.y = 2.2; dizzy.visible = false; root.add(dizzy);
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(2.5, 28), new THREE.MeshBasicMaterial({ color: 0x0c2a48, transparent: true, opacity: 0.6, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(0.75, 1.3, 1); shadow.visible = false; scene.add(shadow);
+  const b = { kind: 'tuna', root, tilt, body, dizzy, shadow, pos: root.position, r: 2.4, h: 1.8, alive: true, hp: 4, maxHp: 4, state: 'sleep', t: 0, arena, home: V3(x, y, z), sx: x, sz: z, yaw: 0 };
+  enemies.push(b); return b;
+}
+function hitTuna(b) {
+  b.hp--; b.state = 'hurt'; b.t = 0; sfx.bossHit(); shake = 0.4;
+  burst(b.pos.clone().add(V3(0, 1.5, 0)), { n: 20, color: 0x9fd8ff, speed: 7, life: 0.7 });
+  toast(b.hp > 1 ? 'Splat! Again!' : b.hp === 1 ? 'One more hit!' : 'BLUB! My crown!', 1.6);
+}
+function updateTuna(b, dt) {
+  const A = b.arena, fy = A.y, p = player;
+  if (!b.alive) {
+    b.t += dt; b.root.scale.set(1 + b.t, Math.max(0.02, 1 - b.t * 1.2), 1 + b.t);
+    if (b.t > 0.9 && !b.gone) { b.gone = true; scene.remove(b.root); scene.remove(b.shadow); burst(b.pos.clone(), { n: 40, color: 0xffffff, speed: 9, size: 0.6, life: 1 }); spawnStar('tuna', V3(b.home.x, fy + 2.2, b.home.z)); }
+    return;
+  }
+  b.t += dt;
+  const inArena = p.pos.y > fy - 0.5 && p.pos.x > A.x0 && p.pos.x < A.x1 && p.pos.z > A.z0 && p.pos.z < A.z1;
+  const hits = b.maxHp - b.hp, T = b.tilt;
+  b.dizzy.visible = b.state === 'flop'; b.shadow.visible = b.state === 'under' || b.state === 'warn';
+  switch (b.state) {
+    case 'sleep':
+      T.rotation.set(0, 0, Math.sin(b.t * 1.5) * 0.05);
+      if (inArena && G.mode === 'play') {
+        b.state = 'intro'; b.t = 0;
+        openDialog('Il Tonno Padrino', ['BLUB BLUB! Who is skating on MY frozen hold?!', 'I am Il Tonno Padrino, godfather of the Frozen Sea. Nobody stomps the Padrino!', '(Tip: watch his shadow under the ice and keep moving. When he flops onto the ice, GROUND POUND him — jump, then crouch in the air.)']);
+      }
+      break;
+    case 'intro': if (G.mode === 'play') { b.state = 'dive'; b.t = 0; } break;
+    case 'dive': // sinks through the ice
+      b.pos.y -= dt * 7;
+      if (b.t > 0.75) { b.state = 'under'; b.t = 0; b.root.visible = false; b.sx = b.pos.x; b.sz = b.pos.z; sfx.splash(); }
+      break;
+    case 'under': {
+      if (!inArena) b.t -= dt; // waits for you to come back
+      else {
+        const dx = p.pos.x - b.sx, dz = p.pos.z - b.sz, d = Math.hypot(dx, dz), v = (5.5 + hits * 0.9) * dt;
+        if (d > v) { b.sx += dx / d * v; b.sz += dz / d * v; } else { b.sx = p.pos.x; b.sz = p.pos.z; }
+        b.yaw = Math.atan2(dx, dz);
+      }
+      b.sx = clamp(b.sx, A.x0 + 2, A.x1 - 2); b.sz = clamp(b.sz, A.z0 + 2, A.z1 - 2);
+      b.shadow.rotation.z = -b.yaw; b.shadow.scale.set(0.75, 1.3, 1);
+      if (b.t > 2.6 - hits * 0.3) { b.state = 'warn'; b.t = 0; sfx.crate(); }
+      break;
+    }
+    case 'warn': {
+      const k = 1 + Math.sin(b.t * 30) * 0.12; b.shadow.scale.set(0.75 * k, 1.3 * k, 1);
+      if (Math.random() < dt * 30) burst(V3(b.sx + (Math.random() - 0.5) * 3, fy + 0.1, b.sz + (Math.random() - 0.5) * 3), { n: 1, color: 0xc8ecff, speed: 3, grav: 15, up: 4, size: 0.2, life: 0.4 });
+      if (b.t > 0.65) {
+        b.state = 'burst'; b.t = 0; b.root.visible = true; b.pos.set(b.sx, fy - 3, b.sz); sfx.splash(); sfx.pound(); shake = 0.3;
+        burst(V3(b.sx, fy + 0.2, b.sz), { n: 18, color: 0xc8ecff, speed: 7, size: 0.35, grav: 20, life: 0.8, up: 8 });
+      }
+      break;
+    }
+    case 'burst': {
+      const j = b.t / 1.1;
+      if (j < 0.5) { b.pos.y = fy - 3 + 8.5 * Math.sin(j * Math.PI); T.rotation.set(-Math.PI / 2, 0, 0); }
+      else { const u = Math.min(1, (j - 0.5) / 0.5); b.pos.y = fy + 0.9 + 4.6 * (1 - u * u); T.rotation.set(lerp(-Math.PI / 2, 0, u), 0, lerp(0, Math.PI / 2, u)); }
+      if (j >= 1) {
+        b.state = 'flop'; b.t = 0; b.pos.y = fy + 0.9; sfx.pound(); shake = 0.4;
+        ringFx(V3(b.pos.x, fy, b.pos.z), hits >= 1 ? { color: 0xc8ecff, life: 1.2, hurt: true, speed: 9 } : { max: 4 });
+      }
+      break;
+    }
+    case 'flop':
+      T.rotation.set(0, Math.sin(b.t * 9) * 0.12, Math.PI / 2 + Math.sin(b.t * 7) * 0.08); b.dizzy.rotation.y += dt * 4;
+      if (b.t > 3.3 - hits * 0.3) { b.state = 'dive'; b.t = 0; }
+      break;
+    case 'hurt':
+      b.root.visible = Math.floor(b.t * 20) % 2 === 0;
+      if (b.t > 1.0) { b.root.visible = true; if (b.hp <= 0) { b.alive = false; b.t = 0; sfx.bossHit(); } else { b.state = 'dive'; b.t = 0; } }
+      break;
+  }
+  b.shadow.position.set(b.sx, fy + 0.05, b.sz); b.root.rotation.y = b.yaw;
+  if (G.mode !== 'play' || p.dead) return;
+  const dx = p.pos.x - b.pos.x, dz = p.pos.z - b.pos.z, d = Math.hypot(dx, dz);
+  if (b.state === 'burst') {
+    if (d < 1.5 + p.r && p.pos.y < b.pos.y + 3 && p.pos.y + p.h > b.pos.y - 3) hurtPlayer(2, V3(b.pos.x, p.pos.y, b.pos.z));
+  } else if (b.state === 'flop' && d < b.r + p.r && p.pos.y - fy > -1 && p.pos.y - fy < 2.4) {
+    const a = Math.atan2(dx, dz);
+    if (p.action === 'gpFall') { hitTuna(b); p.bounce(14); p.vel.x = Math.sin(a) * 8; p.vel.z = Math.cos(a) * 8; }
+    else if (p.vel.y < 0 && p.pos.y - fy > 1) { p.bounce(12); sfx.hit(); toast('Boing! Too slippery — GROUND POUND him!', 1.8); p.vel.x = Math.sin(a) * 6; p.vel.z = Math.cos(a) * 6; }
+    else { p.pos.x = b.pos.x + Math.sin(a) * (b.r + p.r); p.pos.z = b.pos.z + Math.cos(a) * (b.r + p.r); }
+  }
+}
+
+function buildWorld3() {
+  const X = W3X, Y = 0.4, SN = { mat: 'snow' }, IC = { mat: 'ice' };
+  const w3 = (type, range = 5) => ({ type, w: 3, range, y: Y });
+  const wall = (x0, x1, y0, y1, z0, z1, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat); m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    m.castShadow = m.receiveShadow = true; scene.add(m); return addSolid({ x: x0, y: y0, z: z0 }, { x: x1, y: y1, z: z1 });
+  };
+  const iceSlab = (cx, top, cz, fn, w = 3, d = 3) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, d), six(matIceSide, matSnow)); m.castShadow = m.receiveShadow = true;
+    mover(m, V3(X + cx, top - 0.3, cz), fn);
+  };
+  const tree = (x, z, y = Y, pine = false) => place(pine ? 'tree-pine-snow' : 'tree-snow', X + x, y, z, { s: 2.3, solid: true, shrink: 0.85 });
+
+  // freezing sea, sea bed, icebergs, aurora
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshLambertMaterial({ map: texWater, color: 0x86b8ee, transparent: true, opacity: 0.84, depthWrite: false }));
+  sea.rotation.x = -Math.PI / 2; sea.position.set(X, COLD, 0);
+  const su = sea.geometry.attributes.uv; for (let i = 0; i < su.count; i++) su.setXY(i, su.getX(i) * 70, su.getY(i) * 70);
+  scene.add(sea);
+  const bed = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshBasicMaterial({ color: 0x1c4478 })); bed.rotation.x = -Math.PI / 2; bed.position.set(X, -7, 0); scene.add(bed);
+  const bergMat = new THREE.MeshLambertMaterial({ color: 0xe8f4ff, flatShading: true });
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + rand() * 0.3, r = 110 + rand() * 50, h = 10 + rand() * 26;
+    const m = new THREE.Mesh(new THREE.ConeGeometry(6 + rand() * 10, h, 5), bergMat); m.position.set(X + Math.cos(a) * r, COLD + h / 2 - 1, Math.sin(a) * r); m.rotation.y = rand() * 3; scene.add(m);
+  }
+  const texAur = canvasTex(64, (g, s) => {
+    const gr = g.createLinearGradient(0, 0, 0, s); gr.addColorStop(0, '#000'); gr.addColorStop(0.4, '#2fe0a0'); gr.addColorStop(0.75, '#2a6ad0'); gr.addColorStop(1, '#000');
+    g.fillStyle = gr; g.fillRect(0, 0, s, s);
+    for (let x = 0; x < s; x += 2) { g.fillStyle = `rgba(0,0,0,${0.15 + rand() * 0.6})`; g.fillRect(x, 0, 2, s); }
+  });
+  for (const [r, y, h, a0, len] of [[240, 105, 70, 0.3, 1.6], [290, 135, 80, 2.5, 1.4], [220, 95, 60, 4.3, 1.3]]) {
+    const t = texAur.clone(); t.needsUpdate = true; t.repeat.set(3, 1);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 40, 1, true, a0, len), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, fog: false }));
+    m.position.set(X, y, 0); scene.add(m);
+  }
+
+  // --- Arrival floe (south) ---
+  terrainBox(X - 8, X + 8, -4, Y, 40, 62, SN);
+  makeGate(X, Y, 59.5, 2, 0, { name: 'Ice Gate', gold: gateIce });
+  tree(-6.3, 60, Y, true); tree(6.3, 59.5); place('sign', X + 3, Y, 41, { s: 2.5 });
+  crate(X - 6, 43, 'pea', Y);
+  scarf(npc('broccoli', 'Broccolino', X + 5, 44.5, 4, [
+    'C-c-capitano! You c-came through the Ice Gate! Welcome to Mare Surgelato, the Frozen Sea.',
+    'Il Tonno Padrino and his fishy gang froze everything, and took 5 Golden Stars!',
+    'The blue ice is slippery — you keep sliding, so start braking early. The white snow is fine.',
+    'You can swim here, but the water is freezing: stay in too long and you lose health. And the cracked floes break under your feet!',
+  ], { y: Y, eyes: { hf: 0.62 } }));
+  // cracking floes up to the piazza
+  floe(X, Y, 37.5); floe(X, Y, 33.5); floe(X, Y, 30);
+  coin(X, Y + 0.9, 37.5); coin(X, Y + 0.9, 33.5); coin(X, Y + 0.9, 30);
+
+  // --- Piazza Ghiaccio (centre): one big slippery rink with a snowy middle ---
+  terrainBox(X - 20, X + 20, -4, Y, 0, 27.5, IC);
+  terrainBox(X - 6, X + 6, -3, Y + 0.06, 8, 18, SN);
+  checkpoint(X - 3.5, Y, 25.5);
+  const igloo = new THREE.Mesh(new THREE.SphereGeometry(3, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), matSnow); igloo.position.set(X - 13, Y, 21); igloo.castShadow = igloo.receiveShadow = true; scene.add(igloo);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 0.5), new THREE.MeshBasicMaterial({ color: 0x1c2a48 })); door.position.set(X - 13, Y + 0.75, 23.75); scene.add(door);
+  addSolid({ x: X - 15.1, y: Y, z: 18.9 }, { x: X - 10.9, y: Y + 2.5, z: 23.1 });
+  pea(X - 13, Y + 3.5, 21);
+  tree(17.5, 2.5); tree(-18, 2); tree(18, 16, Y, true); tree(-18, 14, Y, true);
+  coinRing(X, Y + 0.9, 13, 5, 8); coinLine([X - 16, Y + 0.7, 10], [X - 9, Y + 0.7, 3], 5); coinLine([X + 9, Y + 0.7, 10], [X + 16, Y + 0.7, 10], 5);
+  crate(X + 17, 24.5, 'coins', Y); crate(X + 17, 24.5, 'pea', Y + 1.4); crate(X + 14.2, 24.5, 'heart', Y);
+  heartPickup(X - 17, Y + 0.5, 25);
+  steak(X - 10, 8, w3('maki', 5)); steak(X + 11, 19, w3('maki', 5)); steak(X + 12, 5, w3('maki', 4));
+  steak(X - 4, 4, w3('frozen', 4)); steak(X + 15, 13, w3('frozen', 3));
+  frozenVillager('pumpkin', 5, X + 8, Y, 23, 'Zucchetta'); frozenVillager('corn', 5, X - 16, Y, 6, 'Pannocchietto');
+  scarf(npc('avocado', 'Zia Avocado', X - 5.5, 24.5, 5, () => G.stars.has('peas') && G.peas >= 8 ? ['Pea soup for everyone! That will warm us right up.'] : [
+    'Brrr! I would love to cook a hot pea soup, but all my peas blew away in the storm.',
+    `Eight Snow Peas are scattered over the Frozen Sea — you have ${G.peas} of 8. Look in crates, on roofs and on lonely floes.`,
+    'Bring them all and a Golden Star will appear on the snow in the middle of the piazza!',
+  ], { y: Y, eyes: { hf: 0.6 } }), 0x3f8cff);
+  scarf(npc('cauliflower', 'Nonna Cavolfiore', X + 5.5, 24.5, 5, () => {
+    if (G.thawed >= 5) return ['All five are free! Thank you, Capitano — hot chocolate is on me.'];
+    return ['Oh dear, oh dear. The fish froze five of my neighbours into blocks of ice!',
+      'A sword only scratches the ice. Jump next to a block — or on top of it — and GROUND POUND to shatter it.',
+      `${5 - G.thawed} of them are still frozen: two here in the piazza, one on the trawler, one by the lighthouse and one past the sushi belts.`];
+  }, { y: Y, eyes: { hf: 0.55 } }), 0xffd23f);
+
+  // --- crossing to the sunken trawler (north) ---
+  floe(X, Y, -2); coin(X, Y + 0.9, -2);
+  iceSlab(0, Y, -5.25, (t) => V3(Math.sin(t * 0.9) * 3, 0, 0)); pea(X, Y + 2.5, -5.25);
+  ember(X - 5, -3.7, { dx: 10, height: 3.4, period: 3, phase: 0.5, w: 3 });
+  ramp(X - 2, X + 2, -12, -7, -4, Y, 3, 'z', -1, matDeck);
+  terrainBox(X - 11, X + 11, -4, 3, -48, -12, { mat: 'hull' });
+  terrainBox(X - 9, X + 9, 2.5, 3.06, -42, -22, IC);                       // the flooded, frozen hold
+  const matRail = new THREE.MeshLambertMaterial({ color: 0x74231f }), matCabin = new THREE.MeshLambertMaterial({ color: 0xf0ede4 });
+  wall(X - 11, X - 10.4, 3, 4.1, -48, -12, matRail); wall(X + 10.4, X + 11, 3, 4.1, -48, -12, matRail);
+  wall(X - 10.4, X - 2.2, 3, 4.1, -12.6, -12, matRail); wall(X + 2.2, X + 10.4, 3, 4.1, -12.6, -12, matRail); wall(X - 10.4, X + 10.4, 3, 4.1, -48, -47.5, matRail);
+  wall(X - 6, X + 6, 3, 7, -47.5, -43.5, matCabin);
+  for (const wx of [-4, -1.3, 1.3, 4]) { const win = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.2, 0.1), new THREE.MeshBasicMaterial({ color: 0x2a4a78 })); win.position.set(X + wx, 5.6, -43.45); scene.add(win); }
+  const funnel = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 3.2, 14), new THREE.MeshLambertMaterial({ color: 0xe8352b })); funnel.position.set(X + 3, 8.6, -45.5); funnel.castShadow = true; scene.add(funnel);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 11, 8), matRail); mast.position.set(X - 8.6, 8.5, -16); mast.rotation.z = 0.08; mast.castShadow = true; scene.add(mast);
+  const yard = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 6, 6), matRail); yard.position.set(X - 9, 11.5, -16); yard.rotation.x = Math.PI / 2; scene.add(yard);
+  pea(X - 2, 8.3, -45.5);
+  checkpoint(X + 6, 3, -14); heartPickup(X - 8, 3.5, -20);
+  coinLine([X - 9.5, 3.7, -24], [X - 9.5, 3.7, -40], 6); coinLine([X + 9.5, 3.7, -24], [X + 9.5, 3.7, -40], 6);
+  frozenVillager('carrot', 3.4, X + 7.5, 3, -18.5, 'Carotina');
+  scarf(npc('leek', 'Porro the Deckhand', X - 5.5, -15.5, 3.6, () => G.stars.has('tuna') ? ['The old trawler is ours again. The Padrino is on ice — for good!'] : [
+    'Psst, Capitano! The hold of this trawler is flooded and frozen over. Il Tonno Padrino lives under the ice.',
+    'You will see his shadow following you. Keep moving! He bursts up right where you stand.',
+    'After the leap he flops on the ice for a moment. A sword or a stomp just slides off — GROUND POUND him. Four times!',
+  ], { y: 3, eyes: { hf: 0.55 } }), 0x3fa34d);
+  makeTuna(X, 3.06, -32, { x0: X - 9, x1: X + 9, z0: -42, z1: -22, y: 3.06 });
+
+  // --- the Sushi Belt Run (east) ---
+  terrainBox(X + 20, X + 26, -4, Y, 9, 17, SN);
+  runPad(X + 23, Y, 13, V3(X + 70, Y + 1.6, 13));
+  place('sushi-salmon', X + 21.3, Y, 16, { s: 9, r: 0.4 }); place('sushi-egg', X + 21.5, Y, 10, { s: 9, r: -0.5 }); place('soy', X + 25, Y, 16.2, { s: 7 });
+  scarf(npc('eggplant', 'Chef Melanzana', X + 24.6, 10.2, 4.2, () => G.stars.has('belt') ? ['Bravissimo! Nobody has ever run my sushi belts that fast.'] : [
+    'Welcome to my sushi bar! Well… it was mine, until the sushi rolls took over the conveyor belts.',
+    `Step on the red button and a Golden Star appears at the far end — but only for ${run.T} seconds!`,
+    'The belts push against you, and the middle one pushes sideways. Long jumps skip a lot of belt!',
+  ], { y: Y, eyes: { hf: 0.6 } }), 0xffffff);
+  belt(X + 26, X + 38, 11, 15, Y, -4, 0); coinLine([X + 28, Y + 0.8, 13], [X + 36, Y + 0.8, 13], 4);
+  belt(X + 40.5, X + 50.5, 10, 16, Y, 0, 3.5); coinLine([X + 42.5, Y + 0.8, 12], [X + 48.5, Y + 0.8, 12], 3);
+  terrainBox(X + 44, X + 47, -4, Y, 18.5, 21.5, SN); pea(X + 45.5, Y + 1.2, 20);
+  belt(X + 53, X + 65, 11, 15, Y, -5.5, 0); coinLine([X + 55, Y + 0.8, 13], [X + 63, Y + 0.8, 13], 4);
+  ember(X + 59, 8, { dz: 10, height: 3.6, period: 2.4, w: 3 });
+  terrainBox(X + 65, X + 75, -4, Y, 7, 19, SN);
+  place('maki-roe', X + 73.5, Y, 17.5, { s: 12 }); place('rice-ball', X + 66.5, Y, 8.2, { s: 9 });
+  frozenVillager('cabbage', 6.5, X + 72, Y, 9.5, 'Verzolina'); heartPickup(X + 67, Y + 0.5, 17.5);
+  steak(X + 71.5, 15, w3('maki', 3));
+
+  // --- Cono Lighthouse (west) ---
+  floe(X - 22.25, Y, 16); floe(X - 25.75, Y, 16);
+  ember(X - 24, 20.5, { dz: -9, height: 3.4, period: 2.8, w: 3 });
+  terrainBox(X - 48, X - 28, -4, Y, 5, 27, SN);
+  const TC = { x: X - 38, z: 16 }, TOP = 18;
+  texWafer.repeat.set(6, 5);
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(3.3, 2.1, TOP - Y, 20), new THREE.MeshLambertMaterial({ map: texWafer })); cone.position.set(TC.x, (TOP + Y) / 2, TC.z); cone.castShadow = cone.receiveShadow = true; scene.add(cone);
+  addSolid({ x: TC.x - 2.5, y: Y, z: TC.z - 2.5 }, { x: TC.x + 2.5, y: TOP, z: TC.z + 2.5 });
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(3.7, 3.7, 0.6, 20), matSnow); cap.position.set(TC.x, TOP - 0.3, TC.z); cap.castShadow = cap.receiveShadow = true; scene.add(cap);
+  addSolid({ x: TC.x - 3.3, y: TOP - 0.6, z: TC.z - 3.3 }, { x: TC.x + 3.3, y: TOP, z: TC.z + 3.3 });
+  for (const [px, pz] of [[-2.6, -2.6], [2.6, -2.6], [-2.6, 2.6], [2.6, 2.6]]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 3.4, 6), matRail); post.position.set(TC.x + px, TOP + 1.7, TC.z + pz); scene.add(post); }
+  const scoop = new THREE.Mesh(new THREE.SphereGeometry(3.9, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xff9ec4, side: THREE.DoubleSide })); scoop.position.set(TC.x, TOP + 3.4, TC.z); scoop.scale.y = 0.8; scoop.castShadow = true; scene.add(scoop);
+  const cherry = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10), new THREE.MeshLambertMaterial({ color: 0xe8352b })); cherry.position.set(TC.x, TOP + 7, TC.z); scene.add(cherry);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff2a0 })); lamp.position.set(TC.x, TOP + 3.1, TC.z); scene.add(lamp);
+  for (let i = 0; i < 13; i++) {
+    const a = 0.5 + i * 0.66, R = 6.5, x = TC.x + Math.cos(a) * R, z = TC.z + Math.sin(a) * R, top = Y + 1.25 * (i + 1);
+    if (i === 4 || i === 9) iceSlab(x - X, top, z, (t) => V3(0, Math.sin(t * 1.2 + i) * 1.1, 0));
+    else if (i % 3 === 2) floe(x, top, z);
+    else terrainBox(x - 1.5, x + 1.5, top - 0.6, top, z - 1.5, z + 1.5, SN);
+    if (i === 7) pea(x, top + 1.1, z); else if (i === 10) heartPickup(x, top + 0.5, z); else if (i !== 4 && i !== 9) coin(x, top + 0.9, z);
+  }
+  spawnStar('cono', V3(TC.x, TOP + 1.3, TC.z), { silent: true });
+  windZone({ x: TC.x - 11, y: Y + 6.5, z: TC.z - 11 }, { x: TC.x + 11, y: TOP + 8, z: TC.z + 11 }, V3(4.5, 0, 0));
+  checkpoint(X - 30, Y, 9.5); tree(-46, 24, Y, true); tree(-45.5, 20.5); tree(-30, 25);
+  frozenVillager('mushroom', 14, X - 45, Y, 8.5, 'Funghetta');
+  coinLine([X - 46, Y + 0.7, 12], [X - 46, Y + 0.7, 18], 4);
+  scarf(npc('celery-stick', 'Nonno Sedano', X - 31, 22.5, 5, () => G.stars.has('cono') ? ['You made it to the top! The lamp shines brighter already.'] : [
+    'I am Nonno Sedano, keeper of the Cono Lighthouse — the tastiest lighthouse on the Frozen Sea.',
+    'A Golden Star is stuck up in the lantern, right under the strawberry scoop. Climb the platforms around the cone!',
+    'Careful: halfway up, the wind starts to blow. When you hear the WHOOSH, stand still or lean into it.',
+  ], { y: Y, eyes: { hf: 0.8, size: 0.09, spread: 0.3 } }), 0xe8352b);
+
+  // --- a lonely floe you can only swim to (south-west) ---
+  terrainBox(X - 27, X - 21, -4, Y, 44, 50, SN);
+  pea(X - 24, Y + 1.2, 47); heartPickup(X - 22.5, Y + 0.5, 45.5); tree(-25.8, 48.8, Y, true);
 }
 
 const clouds = [];
@@ -1750,8 +2213,12 @@ function togglePause() {
   if (G.mode === 'play') {
     G.mode = 'pause'; sfx.pause(); document.exitPointerLock?.();
     const li = (id) => `<li class="${G.stars.has(id) ? 'got' : 'no'}">${G.stars.has(id) ? '★' : '☆'} ${STAR_NAMES[id]}</li>`;
-    $('starlist').innerHTML = '<li class="hd">Garden Isle</li>' + STAR_ORDER.map(li).join('')
-      + (world1Stars() >= 7 ? '<li class="hd">Isola Brace</li>' + STAR_ORDER2.map(li).join('') : '<li class="no">☆ ??? — collect all 7 to wake the Star Gate</li>');
+    const worlds = [['Garden Isle', STAR_ORDER, true], ['Isola Brace', STAR_ORDER2, world1Stars() >= 7], ['Mare Surgelato', STAR_ORDER3, world2Stars() >= 5]];
+    $('starlist').innerHTML = worlds.map(([name, order, open], i) => {
+      if (!open && i + 1 !== G.world) return `<li class="hd">??? <span class="n">locked</span></li>`;
+      const hd = `<li class="hd">${name} <span class="n">${starsIn(order)} / ${order.length}</span></li>`;
+      return i + 1 === G.world ? hd + order.map(li).join('') : hd;
+    }).join('');
     $('pause').style.display = 'flex';
   } else if (G.mode === 'pause') { G.mode = 'play'; $('pause').style.display = 'none'; sfx.pause(); }
 }
@@ -1788,9 +2255,10 @@ function frame() {
         if (G.mode === 'play' || G.mode === 'starget') updatePlayer(STEP_DT);
         for (const e of enemies) {
           if (e.gone) continue;
-          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else if (e.kind === 'ember') updateEmber(e, STEP_DT); else updateBoss(e, STEP_DT);
+          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else if (e.kind === 'ember') updateEmber(e, STEP_DT); else if (e.kind === 'tuna') updateTuna(e, STEP_DT); else updateBoss(e, STEP_DT);
         }
       }
+      updateFloes(dt); updateRun(dt); updateWinds(dt);
       if (healQueue > 0) { G.healT = (G.healT || 0) - dt; if (G.healT <= 0) { G.healT = 0.12; healQueue--; if (G.health < 8) setHealth(G.health + 1); } }
     }
     if (G.mode === 'dialog') updateDialog(dt);
@@ -1799,6 +2267,10 @@ function frame() {
       if (G.starT > 2.8) {
         G.mode = 'play'; startAction('normal');
         if (G.stars.size >= TOTAL_STARS && !G.endingShown) { G.endingShown = true; G.mode = 'ending'; $('ending').style.display = 'flex'; document.exitPointerLock?.(); }
+        else if (world2Stars() >= 5 && !G.gate3Announced) {
+          G.gate3Announced = true; sfx.appear();
+          openDialog('The Ice Gate', ['The 5 Golden Stars of Isola Brace shine together… and a cold wind blows across the dock!', 'The frosty Ice Gate on the arrival dock, next to the Star Gate, has woken up.', 'Step through it to reach Mare Surgelato, the Frozen Sea — 5 more Golden Stars are waiting there!']);
+        }
         else if (world1Stars() >= 7 && !G.gateAnnounced) {
           G.gateAnnounced = true; sfx.appear();
           openDialog('The Star Gate', ['The 7 Golden Stars shine together… and something rumbles down by the beach!', 'The old Star Gate, just south of where you landed, has woken up.', 'Step through it to reach Isola Brace, the Ember Isle — 5 more Golden Stars are waiting there!']);
@@ -1808,7 +2280,7 @@ function frame() {
     if (G.mode === 'travel') {
       G.travelT += dt;
       if (!G.travelDone && G.travelT > 0.5) { G.travelDone = true; arriveWorld(G.travelTo); $('fade').classList.remove('on'); }
-      if (G.travelT > 1.0) { G.mode = 'play'; banner(G.world === 2 ? 'ISOLA BRACE<small>The Ember Isle — mind the hot sauce!</small>' : 'GARDEN ISLE<small>Home sweet home</small>', 3); }
+      if (G.travelT > 1.0) { G.mode = 'play'; banner(G.world === 3 ? 'MARE SURGELATO<small>The Frozen Sea — do not swim for long!</small>' : G.world === 2 ? 'ISOLA BRACE<small>The Ember Isle — mind the hot sauce!</small>' : 'GARDEN ISLE<small>Home sweet home</small>', 3); }
     }
     if (G.mode === 'dying') {
       G.dieT += dt; animatePlayer(dt);
@@ -1820,6 +2292,11 @@ function frame() {
       const sx = player.pos.x + (Math.random() - 0.5) * 50, sz = player.pos.z + (Math.random() - 0.5) * 50;
       if (floorAt(sx, sz, 50, 0.3).y < LAVA) burst(new THREE.Vector3(sx, LAVA + 0.1, sz), { n: 1, color: 0xffb040, speed: 0.6, size: 0.16, life: 2.4, grav: -4, up: 1.5 });
     }
+    if (G.world === 3 && sim && Math.random() < dt * 16) { // snowfall
+      burst(new THREE.Vector3(player.pos.x + (Math.random() - 0.5) * 44, player.pos.y + 9 + Math.random() * 5, player.pos.z + (Math.random() - 0.5) * 44), { n: 1, color: 0xffffff, speed: 0.6, size: 0.13, life: 3.6, grav: 4, up: -1.5 });
+    }
+    for (const b of belts) { b.tex.offset.x -= b.vx * dt / 2; b.tex.offset.y += b.vz * dt / 2; }
+    for (const f of frozen) if (f.done) { f.t += dt; f.veg.position.y = f.pos.y + Math.abs(Math.sin(f.t * 4)) * 0.35; f.veg.rotation.y += dt * 1.2; }
     for (const s of springs) { s.t = Math.max(0, s.t - dt); s.o.scale.y = 2.6 * (1 - Math.sin(s.t / 0.4 * Math.PI) * 0.4); }
     for (const f of flags) if (f.on) f.o.rotation.y = Math.sin(G.time * 2) * 0.2;
     if (G.mode !== 'pause') updateCamera(dt);
@@ -1839,9 +2316,9 @@ function frame() {
 // ---------------------------------------------------------------------------
 (async () => {
   try { await loadAll(); } catch (e) { $('loading').textContent = 'Failed to load models: ' + e.message; throw e; }
-  setupPlayerModel(); buildLevel(); buildWorld2(); drawHealth();
+  setupPlayerModel(); buildLevel(); buildWorld2(); buildWorld3(); drawHealth();
   // already-collected stars from a previous session: re-spawn as ghost stars only where they are fixed
   $('loading').style.display = 'none'; $('title').style.display = 'flex'; G.mode = 'title';
-  window.__game = { G, player, enemies, items, solids, camState, input, travel, gates };
+  window.__game = { G, player, enemies, items, solids, camState, input, travel, gates, floes, frozen, thaw };
   frame();
 })();

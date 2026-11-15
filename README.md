@@ -3,7 +3,7 @@
 A 3D collect-the-stars platformer in the browser. Capitan Pachino, a tomato pirate, returns to the
 Garden Isle to find it overrun: **vegetables are friends, steaks and fish are enemies**.
 Recover the 7 Golden Stars of the Garden Isle, then step through the Star Gate to Isola Brace
-for 5 more.
+for 5 more, and through the Ice Gate to Mare Surgelato for another 5.
 
 **Play:** https://sirmmo.github.io/pachino64/
 
@@ -48,6 +48,22 @@ back out). The gate on the other side leads home again.
 12. Rack of Ribs Roundup
 
 Racks of ribs are immune to the sword: stomp them, ground pound them or knock them into the sauce.
+
+## World 3: Mare Surgelato
+
+Collecting the five stars of Isola Brace wakes the Ice Gate on its arrival dock. It leads to
+Mare Surgelato, the Frozen Sea: blue ice is slippery, cracked floes break under your feet, and
+you can swim, but the freezing water drains health.
+
+13. Il Tonno Padrino of the Frozen Trawler
+14. Top of the Cono Lighthouse
+15. The Sushi Belt Run
+16. Eight Snow Peas
+17. Thaw the Frozen Villagers
+
+Sushi rolls aim and then roll in a straight line, so they can be baited off the ice. Frozen fish
+need a ground pound to crack their ice first. Il Tonno Padrino is only hurt by a ground pound
+while he flops on the ice.
 
 ## Run locally
 
