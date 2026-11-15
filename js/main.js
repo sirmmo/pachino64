@@ -15,7 +15,10 @@ const SPAWN = new THREE.Vector3(0, 0, 52);
 const W2X = 2000, LAVA = -0.5;
 // World 3 (Mare Surgelato) lives further east still: ice floes on a freezing sea you can swim in, briefly
 const W3X = 4000, COLD = -0.6;
-const lavaAt = (x) => (x > 1000 && x < 3000 ? LAVA : null);
+// World 4 (Dolceterra) floats in a sea of melted chocolate; world 5 (La Grande Cucina) is a giant kitchen
+const W4X = 6000, CHOC = -0.5, W5X = 8000;
+const WORLD_BOUNDS = { 1: [0, 100], 2: [W2X, 92], 3: [W3X, 96], 4: [W4X, 96], 5: [W5X, 96] };
+const lavaAt = (x) => (x > 1000 && x < 3000 ? LAVA : x > 5000 && x < 7000 ? CHOC : null);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
@@ -119,6 +122,20 @@ const matIceSide = new THREE.MeshLambertMaterial({ map: texIceSide });
 const matHull = new THREE.MeshLambertMaterial({ map: texHull });
 const matDeck = new THREE.MeshLambertMaterial({ map: texDeck });
 const six = (side, top) => [side, side, top, side, side, side];
+// World 4 materials: sponge cake, frosting, biscuit, melted chocolate
+const texSponge = canvasTex(64, (g, s) => { speckle(g, s, '#f0cf78', ['#e6c26a', '#f8dc90', '#e0b860'], 350); g.fillStyle = '#fff6ea'; g.fillRect(0, 26, s, 9); g.fillStyle = '#e8507a'; g.fillRect(0, 29, s, 3); });
+const texFrost = canvasTex(64, (g, s) => { speckle(g, s, '#ff9ec4', ['#ff8ab8', '#ffb2d0', '#ffa6c8'], 250); const cols = ['#ffffff', '#5ac8ff', '#ffd23f', '#8be060', '#b58cff']; for (let i = 0; i < 26; i++) { g.fillStyle = cols[i % 5]; g.save(); g.translate(rand() * s, rand() * s); g.rotate(rand() * 3); g.fillRect(-2.5, -0.8, 5, 1.6); g.restore(); } });
+const texBiscuit = canvasTex(64, (g, s) => { speckle(g, s, '#d9a560', ['#cc9850', '#e4b470', '#c48c48'], 400); g.fillStyle = '#a87434'; for (let i = 0; i < 14; i++) g.fillRect(rand() * s, rand() * s, 2, 2); });
+const texCookieTop = canvasTex(64, (g, s) => { speckle(g, s, '#d9a560', ['#cc9850', '#e4b470', '#c48c48'], 400); g.fillStyle = '#4a2812'; for (let i = 0; i < 16; i++) { g.beginPath(); g.arc(rand() * s, rand() * s, 2 + rand() * 2.5, 0, 7); g.fill(); } });
+const texChoc = canvasTex(128, (g, s) => {
+  speckle(g, s, '#5a2f18', ['#4e2812', '#66381e', '#522a14'], 500); g.strokeStyle = 'rgba(150,96,58,.55)'; g.lineWidth = 3; g.lineCap = 'round';
+  for (let i = 0; i < 9; i++) { const x = rand() * s, y = rand() * s, r = 8 + rand() * 14, a = rand() * 6; g.beginPath(); g.arc(x, y, r, a, a + 2 + rand() * 2); g.stroke(); }
+});
+const matSpongeSide = new THREE.MeshLambertMaterial({ map: texSponge });
+const matFrost = new THREE.MeshLambertMaterial({ map: texFrost });
+const matBiscuit = new THREE.MeshLambertMaterial({ map: texBiscuit });
+const matCookieTop = new THREE.MeshLambertMaterial({ map: texCookieTop });
+const matPlate = new THREE.MeshLambertMaterial({ color: 0xf4f0ea });
 
 // ---------------------------------------------------------------------------
 // World: heightfield, solids, water
@@ -134,7 +151,7 @@ function groundHeight(x, z) {
   return h;
 }
 function waterLevelAt(x, z) {
-  if (x > 3000) return COLD;
+  if (x > 3000 && x < 5000) return COLD;
   if (x > 1000) return null;
   if (Math.hypot(x - POND.x, z - POND.z) < POND.r) return POND.level;
   if (Math.hypot(x, z) > 69) return SEA;
@@ -201,7 +218,7 @@ function worldUVBox(w, h, d, cx, cy, cz, sc = 0.25) {
 }
 function terrainBox(x0, x1, y0, y1, z0, z1, { mat = 'grass' } = {}) {
   const w = x1 - x0, h = y1 - y0, d = z1 - z0, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
-  const mats = mat === 'stone' ? matStone : mat === 'basalt' ? six(matBasaltSide, matBasaltTop) : mat === 'snow' ? six(matIceSide, matSnow) : mat === 'ice' ? six(matIceSide, matIceTop) : mat === 'hull' ? six(matHull, matDeck) : six(matDirt, matGrassTop);
+  const mats = mat === 'stone' ? matStone : mat === 'basalt' ? six(matBasaltSide, matBasaltTop) : mat === 'snow' ? six(matIceSide, matSnow) : mat === 'ice' ? six(matIceSide, matIceTop) : mat === 'hull' ? six(matHull, matDeck) : mat === 'sponge' ? six(matSpongeSide, matFrost) : mat === 'biscuit' ? matBiscuit : mat === 'plate' ? matPlate : six(matDirt, matGrassTop);
   const m = new THREE.Mesh(worldUVBox(w, h, d, cx, cy, cz), mats);
   m.position.set(cx, cy, cz); m.castShadow = m.receiveShadow = true; scene.add(m);
   if (mat === 'grass') {
@@ -290,7 +307,7 @@ function moveBody(b, dt) {
 // ---------------------------------------------------------------------------
 const loader = new GLTFLoader();
 const models = {};
-const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones', 'meat-ribs', 'whole-ham', 'sausage', 'lemon', 'pot-stew', 'frying-pan', 'bottle-ketchup', 'maki-salmon', 'maki-roe', 'sushi-salmon', 'sushi-egg', 'rice-ball', 'celery-stick', 'avocado', 'ice-cream', 'popsicle', 'soy'];
+const FOOD = ['carrot', 'tomato', 'broccoli', 'eggplant', 'paprika', 'cabbage', 'corn', 'mushroom', 'onion', 'pumpkin', 'leek', 'radish', 'beet', 'cauliflower', 'meat-raw', 'meat-cooked', 'fish', 'fish-bones', 'meat-ribs', 'whole-ham', 'sausage', 'lemon', 'pot-stew', 'frying-pan', 'bottle-ketchup', 'maki-salmon', 'maki-roe', 'sushi-salmon', 'sushi-egg', 'rice-ball', 'celery-stick', 'avocado', 'ice-cream', 'popsicle', 'soy', 'cake-birthday', 'cupcake', 'lollypop', 'cookie', 'donut-sprinkles', 'pudding', 'strawberry', 'meat-patty', 'turkey', 'pear', 'pineapple', 'orange', 'watermelon', 'whipped-cream'];
 const PLAT = ['tree', 'tree-pine', 'coin-gold', 'star', 'heart', 'spring', 'flag', 'platform', 'block-moving', 'block-moving-blue', 'crate', 'crate-item', 'rocks', 'fence-straight', 'flowers', 'flowers-tall', 'grass', 'hedge', 'mushrooms', 'plant', 'sign', 'stones', 'barrel', 'chest', 'pipe', 'poles', 'tree-snow', 'tree-pine-snow'];
 function loadGLB(url) { return new Promise((res, rej) => loader.load(url, (g) => res(g.scene), undefined, rej)); }
 async function loadAll() {
@@ -407,19 +424,26 @@ const STAR_NAMES = {
   belt: 'The Sushi Belt Run',
   peas: 'Eight Snow Peas',
   thaw: 'Thaw the Frozen Villagers',
+  turkey: 'Barone Tacchino of the Torta Reale',
+  jelly: 'The Great Jelly Jump',
+  raft: 'Biscuit Rafts to Isola Bignè',
+  berries: 'Eight Wild Strawberries',
+  polpette: 'Meatball Roundup',
 };
 const STAR_ORDER = ['boss', 'tower', 'peppers', 'kids', 'fish', 'coins', 'steaks'];
 const STAR_ORDER2 = ['ham', 'crossing', 'skewer', 'lemons', 'ribs'];
 const STAR_ORDER3 = ['tuna', 'cono', 'belt', 'peas', 'thaw'];
-const TOTAL_STARS = STAR_ORDER.length + STAR_ORDER2.length + STAR_ORDER3.length;
+const STAR_ORDER4 = ['turkey', 'jelly', 'raft', 'berries', 'polpette'];
+const TOTAL_STARS = STAR_ORDER.length + STAR_ORDER2.length + STAR_ORDER3.length + STAR_ORDER4.length;
 const starsIn = (order) => order.filter((id) => G.stars.has(id)).length;
-const world1Stars = () => starsIn(STAR_ORDER), world2Stars = () => starsIn(STAR_ORDER2);
+const world1Stars = () => starsIn(STAR_ORDER), world2Stars = () => starsIn(STAR_ORDER2), world3Stars = () => starsIn(STAR_ORDER3);
 let saved = [];
 try { saved = JSON.parse(localStorage.getItem('pachino64') || '{}').stars || []; } catch (e) { saved = []; }
 const G = {
   mode: 'loading', stars: new Set(saved), coins: 0, lives: 4, health: 8, peppers: 0, kids: 0, fishKilled: 0, steaksKilled: 0,
   checkpoint: SPAWN.clone(), time: 0, healthShow: 0, coinStarSpawned: false, nextLifeAt: 50, endingShown: saved.length >= TOTAL_STARS,
   world: 1, lemons: 0, gateCool: 0, gateAnnounced: STAR_ORDER.every((id) => saved.includes(id)),
+  berries: 0, gate4Announced: STAR_ORDER3.every((id) => saved.includes(id)),
   peas: 0, thawed: 0, coldT: 0, runT: 0, gate3Announced: STAR_ORDER2.every((id) => saved.includes(id)),
 };
 function saveGame() { try { localStorage.setItem('pachino64', JSON.stringify({ stars: [...G.stars] })); } catch (e) { /* storage blocked */ } }
@@ -432,6 +456,7 @@ function updateHUD(dt) {
   $('pepperN').textContent = G.peppers; $('peppers').style.display = G.world === 1 && G.peppers > 0 && G.peppers < 8 ? 'flex' : 'none';
   $('lemonN').textContent = G.lemons; $('lemons').style.display = G.world === 2 && G.lemons > 0 && G.lemons < 8 ? 'flex' : 'none';
   $('peaN').textContent = G.peas; $('peas').style.display = G.world === 3 && G.peas > 0 && G.peas < 8 ? 'flex' : 'none';
+  $('berryN').textContent = G.berries; $('berries').style.display = G.world === 4 && G.berries > 0 && G.berries < 8 ? 'flex' : 'none';
   $('timerN').textContent = Math.ceil(G.runT); $('timer').style.display = G.runT > 0 ? 'flex' : 'none';
   if (toastT > 0 && (toastT -= dt) <= 0) $('toast').classList.remove('show');
   if (bannerT > 0 && (bannerT -= dt) <= 0) $('banner').classList.remove('show');
@@ -513,6 +538,11 @@ function collectItem(it) {
       toast(`Snow Pea ${G.peas} / 8`);
       if (G.peas === 8) spawnStar('peas', new THREE.Vector3(W3X + 3, 3.7, 13));
       break;
+    case 'berry':
+      G.berries++; sfx.redcoin(); burst(p, { n: 12, color: 0xff3b5a, speed: 4, life: 0.6 }); addCoins(2);
+      toast(`Wild Strawberry ${G.berries} / 8`);
+      if (G.berries === 8) spawnStar('berries', new THREE.Vector3(W4X + 7, 4.2, 12));
+      break;
     case 'heart': break;
     case 'star': collectStar(it.id); break;
     case 'kid': break;
@@ -524,7 +554,7 @@ function updateItems(dt) {
     it.t += dt;
     const m = it.mesh;
     if (it.type === 'coin') m.rotation.y += dt * 4;
-    else if (it.type === 'pepper' || it.type === 'lemon' || it.type === 'pea') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
+    else if (it.type === 'pepper' || it.type === 'lemon' || it.type === 'pea' || it.type === 'berry') { m.rotation.y += dt * 2; m.position.y = it.pos.y + Math.sin(it.t * 3) * 0.15; }
     else if (it.type === 'star') { m.rotation.y += dt * 2.2; m.position.y = it.pos.y + Math.sin(it.t * 2) * 0.25; }
     else if (it.type === 'heart') {
       const near = player.pos.distanceTo(it.pos) < 2.2;
@@ -555,6 +585,7 @@ function breakCrate(c) {
   else if (c.contents === 'pepper') pepper(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'lemon') lemon(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'pea') pea(p.x, p.y + 0.3, p.z);
+  else if (c.contents === 'berry') berry(p.x, p.y + 0.3, p.z);
   else if (c.contents === 'heart') heartPickup(p.x, p.y - 0.6, p.z);
 }
 const springs = [];
@@ -571,7 +602,7 @@ function mover(name, base, fn, s = [3, 3, 3]) {
   o.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(o);
   const off = { min: b.min.clone().sub(base), max: b.max.clone().sub(base) };
   const sd = addSolid(b.min, b.max);
-  movers.push({ o, base: base.clone(), fn, sd, off, delta: new THREE.Vector3(), t: 0 });
+  const rec = { o, base: base.clone(), fn, sd, off, delta: new THREE.Vector3(), t: 0 }; movers.push(rec); return rec;
 }
 function updateMovers(dt) {
   for (const m of movers) {
@@ -655,6 +686,7 @@ const STEAK_TYPES = {
   sausage: { model: 'sausage', s: 5, speed: 6.6, r: 0.55, h: 1.9 },
   maki: { model: 'maki-salmon', s: 12, speed: 5, r: 0.75, h: 1.45, roller: true },    // aims, then rolls in a straight line
   frozen: { model: 'fish', s: 3.3, speed: 2.4, r: 0.8, h: 2.1, iced: true },          // ground pound cracks the ice first
+  polpetta: { model: 'meat-patty', s: 6, speed: 4.6, r: 0.75, h: 1.9, hopper: true },      // never stops hopping while it chases
 };
 function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 } = {}) {
   type = type || (cooked ? 'cooked' : 'raw'); const T = STEAK_TYPES[type];
@@ -667,6 +699,7 @@ function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 }
   else if (type === 'ribs') { body.rotation.x = Math.PI / 2; body.position.y = 0.19 * s + 0.05; body.position.z = -0.1; }
   else if (type === 'maki') { body.rotation.z = Math.PI / 2; body.position.x = 0.035 * s; }
   else if (type === 'frozen') { body.rotation.x = -Math.PI / 2; body.position.set(0, 0.31 * s, 0.16 * s); }
+  else if (type === 'polpetta') { body.rotation.x = Math.PI / 2; body.position.y = 0.17 * s + 0.05; body.position.z = -0.1; }
   else { body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.05; body.position.z = -0.1; }
   let spin = null, ice = null;
   if (type === 'maki') { spin = new THREE.Group(); spin.position.y = 0.06 * s; spin.add(body); tilt.add(spin); }
@@ -675,7 +708,7 @@ function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 }
   addEyes(tilt, type === 'sausage' ? { hf: 0.74, size: 0.13, spread: 0.2, angry: true } : type === 'maki' ? { hf: 0.6, size: 0.13, spread: 0.16, angry: true } : type === 'frozen' ? { hf: 0.74, size: 0.1, spread: 0.13, angry: true } : { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
   if (type === 'frozen') { ice = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.5, 1.7), matIceBlock); ice.position.y = 1.25; tilt.add(ice); }
   const e = {
-    kind: 'steak', type, w, armored: !!T.armored, roller: !!T.roller, iced: !!T.iced, spin, ice, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
+    kind: 'steak', type, w, armored: !!T.armored, roller: !!T.roller, iced: !!T.iced, hopper: !!T.hopper, spin, ice, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
     pos: root.position, vel: new THREE.Vector3(), r: T.r, h: T.h, onGround: true, alive: true, state: 'patrol', t: 0,
     target: new THREE.Vector3(x, gy, z), speed: T.speed, facing: rand() * 6, hop: 0,
   };
@@ -686,7 +719,8 @@ function ember(x, z, { period = 2.6, phase = 0, height = 4, dx = 0, dz = 0, w = 
   const root = new THREE.Group(); scene.add(root);
   const body = inst(w === 3 ? 'fish' : 'fish-bones', w === 3 ? 3 : 3.6, false); root.add(body);
   if (w === 2) body.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.color = new THREE.Color(0xffb060); c.material.emissive = new THREE.Color(0xff4a00); c.material.emissiveIntensity = 0.8; } });
-  const e = { kind: 'ember', root, body, pos: root.position, alive: true, state: 'swim', t: phase, period, height, x, z, dx, dz, r: 0.9, h: 1, up: false, w, sea: w === 3 ? COLD : LAVA, col: w === 3 ? 0x9fd8ff : 0xff9a2a, skip: -1 };
+  if (w === 4) body.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.color = new THREE.Color(0x7a4424); } });
+  const e = { kind: 'ember', root, body, pos: root.position, alive: true, state: 'swim', t: phase, period, height, x, z, dx, dz, r: 0.9, h: 1, up: false, w, sea: w === 3 ? COLD : w === 4 ? CHOC : LAVA, col: w === 3 ? 0x9fd8ff : w === 4 ? 0x7a4424 : 0xff9a2a, skip: -1 };
   root.position.set(x, e.sea - 2, z); enemies.push(e); return e;
 }
 function updateEmber(e, dt) {
@@ -725,7 +759,7 @@ function makeBoss(x, y, z, arena, cfg = {}) {
   const root = new THREE.Group(); root.position.set(x, y, z); scene.add(root);
   const s = C.s; const tilt = new THREE.Group(); root.add(tilt);
   const body = inst(C.model, s);
-  if (C.model === 'whole-ham') body.position.y = 0.05;
+  if (C.model === 'whole-ham' || C.upright) { body.position.y = 0.05; body.rotation.y = C.rotY || 0; }
   else { body.rotation.x = Math.PI / 2; body.position.y = 0.29 * s + 0.1; body.position.z = -0.25; }
   tilt.add(body);
   root.updateWorldMatrix(true, true); const top = new THREE.Box3().setFromObject(tilt).max.y - y;
@@ -738,7 +772,7 @@ function makeBoss(x, y, z, arena, cfg = {}) {
   crown.position.set(0, top + 0.3, C.crownZ); crown.traverse((c) => c.isMesh && (c.castShadow = true)); tilt.add(crown);
   const dizzy = new THREE.Group(); for (let i = 0; i < 3; i++) { const st = inst('star', 1.2, false); st.position.set(Math.cos(i * 2.1) * 1.4, 0, Math.sin(i * 2.1) * 1.4); dizzy.add(st); }
   dizzy.position.y = top + 1.6; dizzy.visible = false; root.add(dizzy);
-  const b = { kind: 'boss', cfg: C, root, tilt, body, dizzy, pos: root.position, vel: new THREE.Vector3(), r: C.r, h: top - 0.2, onGround: true, alive: true, hp: C.hp, state: 'sleep', t: 0, facing: 0, arena, home: new THREE.Vector3(x, y, z), cycle: 0, chargeDir: new THREE.Vector3() };
+  const b = { kind: C.kind || 'boss', hops: 0, cfg: C, root, tilt, body, dizzy, pos: root.position, vel: new THREE.Vector3(), r: C.r, h: top - 0.2, onGround: true, alive: true, hp: C.hp, state: 'sleep', t: 0, facing: 0, arena, home: new THREE.Vector3(x, y, z), cycle: 0, chargeDir: new THREE.Vector3() };
   enemies.push(b); return b;
 }
 function killEnemy(e, how = 'stomp') {
@@ -753,6 +787,12 @@ function killEnemy(e, how = 'stomp') {
         const left = enemies.filter((x) => x.armored && x.alive).length;
         if (left === 0) spawnStar('ribs', new THREE.Vector3(W2X - 7, 4.2, 12));
         else toast(`Ribs left: ${left}`, 1.6);
+      }
+    } else if (e.w === 4) {
+      if (e.hopper) {
+        const left = enemies.filter((x) => x.hopper && x.alive).length;
+        if (left === 0) spawnStar('polpette', new THREE.Vector3(W4X - 7, 4.2, 12));
+        else toast(`Meatballs left: ${left}`, 1.6);
       }
     } else if (e.w === 1) {
       const left = enemies.filter((x) => x.kind === 'steak' && x.w === 1 && x.alive).length;
@@ -814,14 +854,16 @@ function updateSteak(e, dt) {
     // edge check: don't walk off ledges
     const ax = e.pos.x + Math.sin(e.facing) * 1.2, az = e.pos.z + Math.cos(e.facing) * 1.2;
     const ahead = floorAt(ax, az, e.pos.y, 0.3).y;
-    if (e.state !== 'roll' && (ahead < e.pos.y - 1.2 || (e.w !== 3 && waterLevelAt(ax, az) !== null))) { speed = 0; if (e.state === 'patrol') e.t = 5; }
+    if (e.state !== 'roll' && (!e.hopper || e.onGround) && (ahead < e.pos.y - 1.2 || (e.w !== 3 && waterLevelAt(ax, az) !== null))) { speed = 0; if (e.state === 'patrol') e.t = 5; }
     e.vel.x = Math.sin(e.facing) * speed; e.vel.z = Math.cos(e.facing) * speed;
   } else { e.vel.x *= 1 - dt * 2; e.vel.z *= 1 - dt * 2; }
+  if (e.hopper && e.onGround && e.state === 'chase') { e.vel.y = 10.5; e.onGround = false; }
   e.vel.y = Math.max(e.vel.y - GRAV * dt, -MAX_FALL);
   moveBody(e, dt);
   if (e.pos.y < -20) { e.pos.copy(e.home); e.vel.set(0, 0, 0); }
   if (e.w === 2 && e.pos.y < LAVA) { burst(e.pos.clone().setY(LAVA + 0.2), { n: 14, color: 0xff9a2a, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // sizzled in the sauce
   if (e.w === 3 && e.pos.y < COLD - 0.3) { burst(e.pos.clone().setY(COLD + 0.2), { n: 14, color: 0x9fd8ff, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // plop
+  if (e.w === 4 && e.pos.y < CHOC) { burst(e.pos.clone().setY(CHOC + 0.2), { n: 14, color: 0x7a4424, speed: 5, grav: 15, up: 6 }); sfx.splash(); killEnemy(e); return; } // glub
   // waddle hop animation
   e.hop += dt * (speed > 2 ? 12 : 7);
   e.root.rotation.y = e.facing;
@@ -1047,6 +1089,7 @@ function doJump() {
     else if (chain && p.jumpKind === 2 && hs > 6) { p.jumpKind = 3; p.vel.y = 17.5; sfx.jump3(); startAction('jump3'); }
     else { p.jumpKind = 1; p.vel.y = 11.5; sfx.jump(); startAction('jump'); }
   }
+  if (p.ground && p.ground.sticky) p.vel.y *= 0.72; // caramel holds on to your boots
   p.onGround = false; p.coyote = 0; p.jumpBuf = 0; p.airSlashed = false; p.cutJump = false; p.squash = -0.25;
 }
 
@@ -1101,6 +1144,7 @@ function updatePlayer(dt) {
     const icy = !air && p.ground && p.ground.ice;
     let maxS = RUN * mag, accel = air ? 16 : icy ? 8 : 45;
     if (p.crouching) { maxS = 0; accel = icy ? 4 : 12; }
+    if (!air && p.ground && p.ground.sticky) maxS *= 0.4;
     if (p.action === 'longjump') { accel = 3; maxS = Math.max(hs, 4); }
     if (p.action === 'backflip') accel = 6;
     const tvx = mx * maxS, tvz = mz * maxS;
@@ -1176,12 +1220,17 @@ function updatePlayer(dt) {
       }
     }
     if (p.jumpKind && G.time - p.lastLand > 0.22) p.jumpKind = 0;
-    if (!water || p.floorY > (water ?? -99)) { if (!p.ground || !(p.ground.vel || p.ground.belt || p.ground.floe)) p.lastSafe.copy(p.pos); }
+    if (!water || p.floorY > (water ?? -99)) { if (!p.ground || !(p.ground.vel || p.ground.belt || p.ground.floe || p.ground.jelly)) p.lastSafe.copy(p.pos); }
+  }
+  // jelly: boing
+  if (p.onGround && p.ground && p.ground.jelly && p.action !== 'star') {
+    const k = p.action === 'gpLand' ? 1.5 : input.jump ? 1.3 : 1;
+    p.vel.y = p.ground.jelly * k; p.ground.jref.wob = 0.4; p.onGround = false; startAction('jump'); p.cutJump = true; p.jumpKind = 0; p.airSlashed = false; sfx.spring();
   }
   // fell into the void
   if (p.pos.y < -25) { hurtPlayer(2, p.pos); p.pos.copy(p.lastSafe).add(new THREE.Vector3(0, 2, 0)); p.vel.set(0, 0, 0); }
   // keep in world bounds (sea)
-  const wcx = G.world === 3 ? W3X : G.world === 2 ? W2X : 0, wR = G.world === 3 ? 96 : G.world === 2 ? 92 : 100;
+  const [wcx, wR] = WORLD_BOUNDS[G.world];
   const rr = Math.hypot(p.pos.x - wcx, p.pos.z); if (rr > wR) { p.pos.x = wcx + (p.pos.x - wcx) * wR / rr; p.pos.z *= wR / rr; }
   // hot sauce: ouch, and a big bounce so you can steer back to land
   if (G.world === 2 && p.pos.y < LAVA + 0.1 && G.mode === 'play') {
@@ -1189,6 +1238,20 @@ function updatePlayer(dt) {
     burst(p.pos.clone(), { n: 12, color: 0xff9a2a, speed: 5, life: 0.6, grav: 15, up: 6 });
     if (p.invuln <= 0) { setHealth(G.health - 1); sfx.hurt(); p.invuln = 1.0; if (G.health <= 0) killPlayer(); }
   }
+  // melted chocolate: you sink. Hop out at once (each hop is weaker) or lose health
+  if (G.world === 4 && p.pos.y < CHOC && G.mode === 'play') {
+    if (!p.inChoc) { p.inChoc = true; sfx.splash(); burst(p.pos.clone().setY(CHOC + 0.1), { n: 10, color: 0x7a4424, speed: 4, life: 0.6, grav: 15, up: 5 }); }
+    p.vel.x *= 0.9; p.vel.z *= 0.9; if (p.vel.y < -1.3) p.vel.y = -1.3;
+    if (p.action !== 'normal' && p.action !== 'jump' && p.action !== 'hurt') startAction('normal');
+    const hops = p.chocHops || 0;
+    if (p.jumpBuf > 0 && hops < 3) { p.vel.y = 13 - hops * 3.5; p.chocHops = hops + 1; p.jumpBuf = 0; startAction('jump'); p.cutJump = true; sfx.splash(); }
+    if (p.pos.y < CHOC - 1.5) {
+      setHealth(G.health - 1); sfx.hurt(); toast('Glub! Stuck in the chocolate!', 1.6);
+      p.pos.copy(p.lastSafe).add(new THREE.Vector3(0, 1.5, 0)); p.vel.set(0, 0, 0); p.invuln = 1.5; p.chocHops = 0; camState.snap = true;
+      if (G.health <= 0) killPlayer();
+    }
+  } else p.inChoc = false;
+  if (p.onGround) p.chocHops = 0;
   // checkpoints
   for (const f of flags) if (!f.on && p.pos.distanceTo(f.pos) < 2.5) {
     f.on = true; G.checkpoint.copy(f.pos).add(new THREE.Vector3(1.5, 0.2, 0)); sfx.redcoin(); toast('Checkpoint!', 1.4);
@@ -1209,12 +1272,12 @@ function slashHits() {
   for (const e of enemies) {
     if (!e.alive || e.state === 'swim') continue;
     const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz), dy = e.pos.y - p.pos.y;
-    const reach = (e.kind === 'boss' || e.kind === 'tuna' ? e.r + 2 : 2.6);
+    const reach = (e.kind === 'boss' || e.kind === 'hopboss' || e.kind === 'tuna' ? e.r + 2 : 2.6);
     if (d > reach || dy > 2 || dy < -(e.h || 1.5)) continue;
     if (!spin && d > 0.8 && (dx * fx + dz * fz) / d < 0.2) continue;
     if (e.kind === 'ember') continue;
     if (e.kind === 'tuna') { if (e.state === 'flop') { sfx.hit(); toast('His scales are too slippery — ground pound him!', 1.8); } continue; }
-    if (e.kind === 'boss') { if (e.state === 'stunned') hitBoss(e); else { sfx.hit(); toast('Too tough! Make him dizzy first!', 1.5); } }
+    if (e.kind === 'boss' || e.kind === 'hopboss') { if (e.state === 'stunned') hitBoss(e); else { sfx.hit(); toast('Too tough! Make him dizzy first!', 1.5); } }
     else if (e.armored || e.iced) { // swords bounce off bones and ice
       sfx.hit(); toast(e.iced ? 'Clink! Frozen solid — ground pound it!' : 'Clang! Too bony for a sword — stomp it!', 1.6);
       e.state = 'knock'; e.t = 0; e.onGround = false; e.vel.set(dx / (d || 1) * 8, 6.5, dz / (d || 1) * 8);
@@ -1460,6 +1523,7 @@ function buildLevel() {
 const gates = [];
 const gateGold = new THREE.MeshStandardMaterial({ color: 0xffc928, metalness: 0.6, roughness: 0.3, emissive: 0x553300 });
 const gateStone = new THREE.MeshLambertMaterial({ color: 0x8a8590 });
+const gateCandy = new THREE.MeshStandardMaterial({ color: 0xff7ab0, metalness: 0.4, roughness: 0.3, emissive: 0x551030 });
 const gateIce = new THREE.MeshStandardMaterial({ color: 0x9fe4ff, metalness: 0.5, roughness: 0.25, emissive: 0x114466 });
 const gemOn = new THREE.MeshBasicMaterial({ color: 0xffe066 }), gemOff = new THREE.MeshLambertMaterial({ color: 0x4a4658 });
 const texSwirl = canvasTex(128, (g, s) => {
@@ -1472,7 +1536,7 @@ const texSwirl = canvasTex(128, (g, s) => {
     g.stroke();
   }
 }, false);
-function makeGate(x, y, z, to, needs, { count = world1Stars, rot = 0, name = 'Star Gate', gold = gateGold } = {}) {
+function makeGate(x, y, z, to, needs, { count = world1Stars, rot = 0, name = 'Star Gate', gold = gateGold, of = '' } = {}) {
   const root = new THREE.Group(); root.position.set(x, y, z); root.rotation.y = rot; scene.add(root);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.32, 10, 40), gateStone); ring.position.y = 2.2; ring.castShadow = true; root.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(2.15, 40), new THREE.MeshBasicMaterial({ map: texSwirl, transparent: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
@@ -1483,7 +1547,7 @@ function makeGate(x, y, z, to, needs, { count = world1Stars, rot = 0, name = 'St
     const a = lerp(2.75, 0.39, i / Math.max(1, needs - 1));
     const gm = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), gemOff); gm.scale.z = 2; gm.position.set(Math.cos(a) * 2.3, 2.2 + Math.sin(a) * 2.3, 0); root.add(gm); sockets.push(gm);
   }
-  const g = { root, ring, disc, sockets, pos: root.position, to, needs, count, name, gold, hintT: 0, open: false }; gates.push(g); return g;
+  const g = { root, ring, disc, sockets, pos: root.position, to, needs, count, name, gold, of, hintT: 0, open: false }; gates.push(g); return g;
 }
 function updateGates(dt) {
   G.gateCool -= dt;
@@ -1497,12 +1561,13 @@ function updateGates(dt) {
     if (open) {
       if (Math.random() < dt * 10) burst(new THREE.Vector3(g.pos.x + (Math.random() - 0.5) * 3.4, g.pos.y + 0.6 + Math.random() * 3.4, g.pos.z), { n: 1, color: 0x9fd8ff, speed: 0.8, size: 0.14, life: 0.8, up: 1 });
       if (d < 1.5 && G.gateCool <= 0) travel(g.to);
-    } else if ((g.hintT -= dt) <= 0) { g.hintT = 5; toast(`The ${g.name} sleeps… ${n1} / ${g.needs} Golden Stars${g.to === 3 ? ' of Isola Brace' : ''}`, 2.6); }
+    } else if ((g.hintT -= dt) <= 0) { g.hintT = 5; toast(`The ${g.name} sleeps… ${n1} / ${g.needs} Golden Stars${g.of}`, 2.6); }
   }
 }
 const ENV = {
   1: { top: 0x3a8cf0, bottom: 0xcfe9ff, fogN: 90, fogF: 300, sky: 0xeaf6ff, gnd: 0x5d7a3a, hemiI: 1.6, sun: 0xfff2dd, sunI: 2.4 },
   2: { top: 0x2a1446, bottom: 0xff9a55, fogN: 60, fogF: 250, sky: 0xffc9a0, gnd: 0x7a3010, hemiI: 1.5, sun: 0xffb880, sunI: 2.1 },
+  4: { top: 0x6fb4ff, bottom: 0xffd0e6, fogN: 80, fogF: 300, sky: 0xfff0f6, gnd: 0xc08060, hemiI: 1.7, sun: 0xfff0d8, sunI: 2.3 },
   3: { top: 0x0e1650, bottom: 0x7fd0de, fogN: 70, fogF: 280, sky: 0xd8f0ff, gnd: 0x6a8cc0, hemiI: 1.7, sun: 0xdfe8ff, sunI: 1.9 },
 };
 function setEnv(w) {
@@ -1511,7 +1576,13 @@ function setEnv(w) {
   hemi.color.set(e.sky); hemi.groundColor.set(e.gnd); hemi.intensity = e.hemiI; sun.color.set(e.sun); sun.intensity = e.sunI;
   setMusicMood(w);
 }
-const ARRIVE = { 1: new THREE.Vector3(0, 0.2, 49), 2: new THREE.Vector3(W2X, 1.2, 45), 3: new THREE.Vector3(W3X, 0.6, 45) };
+const WORLD_BANNER = {
+  1: 'GARDEN ISLE<small>Home sweet home</small>',
+  2: 'ISOLA BRACE<small>The Ember Isle — mind the hot sauce!</small>',
+  3: 'MARE SURGELATO<small>The Frozen Sea — do not swim for long!</small>',
+  4: 'DOLCETERRA<small>The Sugar Isles — do not sink in the chocolate!</small>',
+};
+const ARRIVE = { 1: new THREE.Vector3(0, 0.2, 49), 2: new THREE.Vector3(W2X, 1.2, 45), 3: new THREE.Vector3(W3X, 0.6, 45), 4: new THREE.Vector3(W4X, 1.2, 45) };
 function travel(to) {
   if (G.mode !== 'play') return;
   G.mode = 'travel'; G.travelT = 0; G.travelTo = to; G.travelDone = false; sfx.appear(); $('fade').classList.add('on');
@@ -1548,7 +1619,7 @@ function buildWorld2() {
   // --- Arrival dock (south) ---
   terrainBox(X - 8, X + 8, -4, 1, 40, 62, B);
   makeGate(X, 1, 59.5, 1, 0);
-  makeGate(X - 6.3, 1, 51, 3, 5, { count: world2Stars, rot: Math.PI / 2, name: 'Ice Gate', gold: gateIce });
+  makeGate(X - 6.3, 1, 51, 3, 5, { count: world2Stars, rot: Math.PI / 2, name: 'Ice Gate', gold: gateIce, of: ' of Isola Brace' });
   place('barrel', X - 6, 1, 42, { s: 2.4, solid: true }); place('rocks', X + 6.3, 1, 60, { s: 2.5, solid: true, shrink: 0.3 }); place('sign', X + 3, 1, 41, { s: 2.5 });
   lemon(X - 6, 2.2, 60);
   npc('radish', 'Ravanello the Scout', X + 5, 44.5, 4, [
@@ -1901,6 +1972,7 @@ function buildWorld3() {
   // --- Arrival floe (south) ---
   terrainBox(X - 8, X + 8, -4, Y, 40, 62, SN);
   makeGate(X, Y, 59.5, 2, 0, { name: 'Ice Gate', gold: gateIce });
+  makeGate(X - 6.3, Y, 51, 4, 5, { count: world3Stars, rot: Math.PI / 2, name: 'Candy Gate', gold: gateCandy, of: ' of Mare Surgelato' });
   tree(-6.3, 60, Y, true); tree(6.3, 59.5); place('sign', X + 3, Y, 41, { s: 2.5 });
   crate(X - 6, 43, 'pea', Y);
   scarf(npc('broccoli', 'Broccolino', X + 5, 44.5, 4, [
@@ -2020,6 +2092,208 @@ function buildWorld3() {
   // --- a lonely floe you can only swim to (south-west) ---
   terrainBox(X - 27, X - 21, -4, Y, 44, 50, SN);
   pea(X - 24, Y + 1.2, 47); heartPickup(X - 22.5, Y + 0.5, 45.5); tree(-25.8, 48.8, Y, true);
+}
+
+// ---------------------------------------------------------------------------
+// World 4: Dolceterra, the Sugar Isles
+// ---------------------------------------------------------------------------
+function berry(x, y, z) { const m = inst('strawberry', 7, false); addEyes(m, { hf: 0.5, size: 0.14 }); return addItem('berry', m, V3(x, y, z)); }
+// Jelly pads: anything that lands on them bounces (higher if you hold jump, highest after a ground pound)
+const jellies = [];
+function jelly(x, top, z, { w = 3, d = 3, v = 17, color = 0xff5a8a, fn = null } = {}) {
+  const g = new THREE.BoxGeometry(w, 1.2, d); g.translate(0, 0.6, 0);
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.8 })); m.castShadow = true;
+  let sd;
+  if (fn) sd = mover(m, V3(x, top - 1.2, z), fn).sd;
+  else { m.position.set(x, top - 1.2, z); scene.add(m); sd = addSolid({ x: x - w / 2, y: top - 1.2, z: z - d / 2 }, { x: x + w / 2, y: top, z: z + d / 2 }); }
+  const j = { m, wob: 0 }; sd.jelly = v; sd.jref = j; jellies.push(j); return j;
+}
+// Caramel: sticky floor that slows you down and weakens your jump
+const matCaramel = new THREE.MeshLambertMaterial({ color: 0xd98a1e, emissive: 0x3a1c00 });
+function caramel(x0, x1, z0, z1, top) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.1, z1 - z0), matCaramel); m.position.set((x0 + x1) / 2, top + 0.01, (z0 + z1) / 2); m.receiveShadow = true; scene.add(m);
+  addSolid({ x: x0, y: top - 0.1, z: z0 }, { x: x1, y: top + 0.06, z: z1 }, { sticky: true });
+}
+// Round biscuit: an island, or a raft when given a path
+function cookieDisc(x, top, z, r, fn = null) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.94, 0.7, 20), [matBiscuit, matCookieTop, matBiscuit]); m.castShadow = m.receiveShadow = true;
+  if (fn) { const rec = mover(m, V3(x, top - 0.35, z), fn); const k = r * 0.2; rec.off.min.x += k; rec.off.max.x -= k; rec.off.min.z += k; rec.off.max.z -= k; return rec; }
+  m.position.set(x, top - 0.35, z); scene.add(m);
+  return addSolid({ x: x - r * 0.8, y: top - 0.7, z: z - r * 0.8 }, { x: x + r * 0.8, y: top, z: z + r * 0.8 });
+}
+// Hopping boss: three big hops (each landing sends a shockwave), then he is out of breath
+function updateHopBoss(b, dt) {
+  if (!b.alive) {
+    b.t += dt; b.root.scale.set(1 + b.t, Math.max(0.02, 1 - b.t * 1.2), 1 + b.t);
+    if (b.t > 0.9 && !b.gone) { b.gone = true; scene.remove(b.root); burst(b.pos.clone().add(V3(0, 1, 0)), { n: 40, color: 0xffffff, speed: 9, size: 0.6, life: 1 }); spawnStar(b.cfg.star, V3(b.home.x, b.home.y + 2.2, b.home.z)); }
+    return;
+  }
+  b.t += dt;
+  const A = b.arena, p = player, C = b.cfg, hits = C.hp - b.hp;
+  const inArena = p.pos.y > A.y - 0.5 && p.pos.x > A.x0 && p.pos.x < A.x1 && p.pos.z > A.z0 && p.pos.z < A.z1;
+  const dx = p.pos.x - b.pos.x, dz = p.pos.z - b.pos.z, d = Math.hypot(dx, dz);
+  b.dizzy.visible = b.state === 'stunned';
+  switch (b.state) {
+    case 'sleep':
+      b.tilt.rotation.x = 0.08 + Math.sin(b.t * 1.5) * 0.04;
+      if (inArena && G.mode === 'play') { b.state = 'intro'; b.t = 0; openDialog(C.name, C.intro); }
+      break;
+    case 'intro': if (G.mode === 'play') { b.state = 'crouch'; b.t = 0; b.hops = 0; b.tilt.rotation.x = 0; } break;
+    case 'wait': if (inArena) { b.state = 'crouch'; b.t = 0; b.hops = 0; } break;
+    case 'crouch': {
+      b.facing += angDiff(b.facing, Math.atan2(dx, dz)) * Math.min(1, dt * 6);
+      const k = Math.min(1, b.t / 0.4); b.tilt.scale.set(1 + k * 0.15, 1 - k * 0.3, 1 + k * 0.15);
+      if (!inArena) { b.state = 'wait'; b.tilt.scale.set(1, 1, 1); break; }
+      if (b.t > Math.max(0.25, 0.65 - hits * 0.09)) {
+        const hv = Math.min(d, 10);
+        b.vel.set(Math.sin(b.facing) * hv, GRAV / 2, Math.cos(b.facing) * hv); b.state = 'air'; b.t = 0; b.tilt.scale.set(0.9, 1.2, 0.9); sfx.jump3();
+      }
+      break;
+    }
+    case 'air':
+      b.vel.y -= GRAV * dt; b.pos.addScaledVector(b.vel, dt);
+      b.pos.x = clamp(b.pos.x, A.x0 + b.r, A.x1 - b.r); b.pos.z = clamp(b.pos.z, A.z0 + b.r, A.z1 - b.r);
+      if (b.vel.y < 0 && b.pos.y <= A.y) {
+        b.pos.y = A.y; b.vel.set(0, 0, 0); b.hops++; sfx.pound(); shake = 0.45; b.tilt.scale.set(1, 1, 1);
+        ringFx(V3(b.pos.x, A.y, b.pos.z), { color: 0xffe0f0, life: 1.3, hurt: true, speed: 8.5 + hits * 0.6 });
+        if (b.hops >= 3) { b.state = 'stunned'; b.t = 0; b.hops = 0; } else { b.state = 'crouch'; b.t = 0; }
+      }
+      break;
+    case 'stunned':
+      b.tilt.rotation.z = Math.sin(b.t * 6) * 0.12; b.dizzy.rotation.y += dt * 4;
+      if (b.t > Math.max(1.8, C.stunT - hits * 0.25)) { b.state = 'crouch'; b.t = 0; b.tilt.rotation.z = 0; }
+      break;
+    case 'hurt':
+      b.tilt.rotation.z = 0; b.root.visible = Math.floor(b.t * 20) % 2 === 0;
+      if (b.t > 1.1) { b.root.visible = true; b.state = 'crouch'; b.t = 0; b.hops = 0; if (b.hp <= 0) { b.alive = false; b.t = 0; sfx.bossHit(); } }
+      break;
+  }
+  b.root.rotation.y = b.facing;
+  if (G.mode !== 'play' || p.dead || b.state === 'sleep' || b.state === 'hurt') return;
+  const dy = p.pos.y - b.pos.y;
+  if (d < b.r + p.r && dy > -1.5 && dy < b.h + 0.3) {
+    const fromTop = p.vel.y < 0 && dy > b.h * 0.6, a = Math.atan2(dx, dz);
+    if (b.state === 'stunned') {
+      if (fromTop || p.action === 'gpFall') { hitBoss(b); p.bounce(14); p.vel.x = Math.sin(a) * 9; p.vel.z = Math.cos(a) * 9; }
+      else { p.pos.x = b.pos.x + Math.sin(a) * (b.r + p.r); p.pos.z = b.pos.z + Math.cos(a) * (b.r + p.r); }
+    } else if (fromTop && b.state !== 'air') { toast('Too bouncy! Wait until he is out of breath!', 1.6); sfx.hit(); p.bounce(14); p.vel.x = Math.sin(a) * 9; p.vel.z = Math.cos(a) * 9; }
+    else hurtPlayer(2, b.pos);
+  }
+}
+
+function buildWorld4() {
+  const X = W4X, Y = 1, SP = { mat: 'sponge' }, BI = { mat: 'biscuit' }, PL = { mat: 'plate' };
+  const w4 = (type, range = 4, y = Y) => ({ type, w: 4, range, y });
+  const lolly = (x, z, y = Y) => place('lollypop', X + x, y, z, { s: 9, r: rand() * 3, solid: true, shrink: 0.12 });
+  // sea of melted chocolate, giant lollipops on the horizon, cotton-candy clouds
+  texChoc.repeat.set(40, 40);
+  const choc = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshBasicMaterial({ map: texChoc })); choc.rotation.x = -Math.PI / 2; choc.position.set(X, CHOC, 0); scene.add(choc);
+  const stickMat = new THREE.MeshLambertMaterial({ color: 0xfaf4ee });
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2 + rand() * 0.3, r = 112 + rand() * 45, h = 26 + rand() * 26, rr = 8 + rand() * 6;
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, h, 8), stickMat); st.position.set(X + Math.cos(a) * r, CHOC + h / 2, Math.sin(a) * r); scene.add(st);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, 2.2, 24), new THREE.MeshLambertMaterial({ color: [0xff5a8a, 0x5ac8ff, 0xffd23f, 0x8be060, 0xb58cff][i % 5] }));
+    disc.rotation.x = Math.PI / 2; disc.rotation.z = a; disc.position.set(st.position.x, CHOC + h + rr * 0.6, st.position.z); disc.lookAt(X, disc.position.y, 0); disc.rotateX(Math.PI / 2); scene.add(disc);
+  }
+  const fluff = [new THREE.MeshLambertMaterial({ color: 0xffc0dc }), new THREE.MeshLambertMaterial({ color: 0xc0e4ff })];
+  for (let i = 0; i < 12; i++) {
+    const a = rand() * Math.PI * 2, r = 70 + rand() * 90, y = 34 + rand() * 30;
+    for (let k = 0; k < 3; k++) { const m = new THREE.Mesh(new THREE.SphereGeometry(5 + rand() * 4, 10, 8), fluff[i % 2]); m.position.set(X + Math.cos(a) * r + (k - 1) * 6, y + rand() * 2, Math.sin(a) * r + rand() * 4); m.scale.y = 0.7; scene.add(m); }
+  }
+
+  // --- Arrival biscuit (south) ---
+  terrainBox(X - 8, X + 8, -4, Y, 40, 62, BI);
+  makeGate(X, Y, 59.5, 3, 0, { name: 'Candy Gate', gold: gateCandy });
+  lolly(-6.3, 60); lolly(6.3, 59.5); place('sign', X + 3, Y, 41, { s: 2.5 });
+  place('cupcake', X + 6, Y, 52, { s: 6, solid: true, shrink: 0.3 });
+  crate(X - 6, 43, 'berry', Y);
+  npc('pear', 'Perina', X + 5, 44.5, 9, [
+    'Capitano! You came through the Candy Gate! Welcome to Dolceterra, the Sugar Isles.',
+    'Barone Tacchino and his meatballs moved in, ate half the desserts and hid 5 Golden Stars!',
+    'The sea is melted chocolate. You do not swim in it — you SINK. Hop out at once, or you lose health.',
+    'Pink jelly makes you bounce: hold jump to go higher. And the golden caramel is sticky — it slows you right down.',
+  ], { y: Y, eyes: { hf: 0.45 } });
+  terrainBox(X - 2, X + 2, -4, Y, 30, 40, BI);
+  coinLine([X, Y + 0.7, 39], [X, Y + 0.7, 31], 5);
+  ember(X - 4.5, 35, { dx: 9, height: 3.6, period: 2.8, w: 4 });
+
+  // --- Piazza Zucchero (centre) ---
+  terrainBox(X - 20, X + 20, -4, Y, 2, 30, SP);
+  place('cake-birthday', X, Y, 16, { s: 7, solid: true, shrink: 0.5 }); berry(X, Y + 3.3, 16);
+  checkpoint(X - 3.5, Y, 28);
+  caramel(X - 14, X - 7, 5, 12, Y); caramel(X + 7, X + 14, 18, 25, Y); berry(X + 10.5, Y + 1.1, 21.5);
+  lolly(-18, 4); lolly(18, 4.5); lolly(-18.5, 28); lolly(18, 27.5);
+  place('cupcake', X - 15, Y, 21, { s: 6, solid: true, shrink: 0.3 }); place('donut-sprinkles', X + 15, Y, 9, { s: 9 }); place('cookie', X - 9, Y, 26, { s: 8 });
+  coinRing(X, Y + 0.8, 16, 6, 8); coinLine([X - 16, Y + 0.7, 14], [X - 8, Y + 0.7, 20], 5); coinLine([X + 8, Y + 0.7, 8], [X + 16, Y + 0.7, 14], 5);
+  crate(X + 11.2, 28, 'heart', Y); crate(X + 14, 28, 'coins', Y);
+  heartPickup(X - 16, Y + 0.5, 27);
+  steak(X - 10, 15, w4('polpetta', 5)); steak(X + 10, 13, w4('polpetta', 5)); steak(X + 2, 6, w4('polpetta', 4));
+  steak(X - 10.5, 8.5, w4('sausage', 3)); steak(X + 10.5, 21.5, w4('sausage', 3));
+  npc('pineapple', 'Don Ananas', X - 5.5, 26.5, 6, () => G.stars.has('berries') && G.berries >= 8 ? ['Strawberry tart for the whole island! Dolce vita, Capitano.'] : [
+    'Ciao, Capitano! I am baking the biggest strawberry tart Dolceterra has ever seen.',
+    `I need Eight Wild Strawberries — you have ${G.berries} of 8. Look on top of cakes, high above the jelly, and in the sticky caramel.`,
+    'Bring them all and a Golden Star will appear right here in the piazza!',
+  ], { y: Y, eyes: { hf: 0.4 } });
+  npc('orange', 'Arancina', X + 5.5, 26.5, 12, () => {
+    const left = enemies.filter((x) => x.hopper && x.alive).length;
+    if (left === 0) return ['Not one meatball left! The desserts are safe.'];
+    return ['Those meatballs! Boing, boing, boing, all over my marzipan.',
+      'They never stop hopping, so wait until one lands and then stomp it — or just use your sword.',
+      `They hop so eagerly that they will follow you right off an edge into the chocolate. ${left} of them are left.`];
+  }, { y: Y, eyes: { hf: 0.5 } });
+
+  // --- Torta Reale, the three-tier cake (north) ---
+  terrainBox(X - 2, X + 2, -4, Y, -4, 2, BI);
+  terrainBox(X - 19, X + 19, -4, Y, -48, -4, PL);
+  terrainBox(X - 16, X + 16, Y, 4, -44, -10, SP);
+  terrainBox(X - 10, X + 10, 4, 8, -40, -16, SP);
+  jelly(X - 8, Y + 0.7, -7); jelly(X + 8, Y + 0.7, -7, { color: 0x8be060 });
+  jelly(X - 13, 4.7, -28, { color: 0xb58cff }); jelly(X + 13, 4.7, -28, { color: 0xffd23f });
+  caramel(X - 6, X + 6, -15.5, -10.5, 4);
+  checkpoint(X + 8.5, 4, -12); heartPickup(X - 14, 4.5, -41); berry(X, Y + 1.1, -46.3); berry(X + 14, 5.1, -42);
+  coinLine([X - 13, 4.7, -14], [X - 13, 4.7, -24], 4); coinLine([X + 13, 4.7, -14], [X + 13, 4.7, -24], 4); coinLine([X - 8, 4.7, -42], [X + 8, 4.7, -42], 6);
+  steak(X, -13, w4('polpetta', 3, 4)); steak(X - 13, -37, w4('polpetta', 3, 4));
+  npc('watermelon', 'Anguria', X + 5.5, -6.5, 5, () => G.stars.has('turkey') ? ['The Torta Reale is ours again. Have a slice!'] : [
+    'This is the Torta Reale. Barone Tacchino sits on the top tier, stuffed with stolen sweets.',
+    'Bounce up on the jelly pads: hold jump as you land to fly higher.',
+    'He hops three times — jump over the shockwaves! — and then he is out of breath. That is your moment. Five hits!',
+  ], { y: Y, eyes: { hf: 0.6 } });
+  const waxes = [0xff5a8a, 0x5ac8ff, 0xffd23f, 0x8be060];
+  [[-9, -39], [9, -39], [-9, -17], [9, -17]].forEach(([cx, cz], i) => {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2.4, 10), new THREE.MeshLambertMaterial({ color: waxes[i] })); c.position.set(X + cx, 9.2, cz); c.castShadow = true; scene.add(c);
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 8), new THREE.MeshBasicMaterial({ color: 0xffb030 })); f.position.set(X + cx, 10.9, cz); scene.add(f);
+  });
+  coinRing(X, 8.8, -28, 6, 8);
+  makeBoss(X, 8, -30, { x0: X - 10, x1: X + 10, z0: -40, z1: -16, y: 8 }, {
+    kind: 'hopboss', model: 'turkey', upright: true, rotY: -Math.PI / 2, s: 6, name: 'Barone Tacchino', star: 'turkey', hp: 5, stunT: 3.0, r: 2.3, crownZ: 0.3, gem: 0xff5a8a,
+    eyes: { hf: 0.74, size: 0.12, spread: 0.16 },
+    intro: ['GOBBLE GOBBLE! Who bounces onto MY cake?!', 'I am Barone Tacchino, and I am stuffed with the finest sweets of Dolceterra. You shall be the cherry on top!', '(Tip: jump over the shockwaves when he lands. After three hops he is out of breath — stomp him, pound him or slash him.)'],
+  });
+
+  // --- the Great Jelly Jump (east) ---
+  jelly(X + 24.5, 0.9, 16); jelly(X + 30, 2.2, 16, { color: 0x8be060 });
+  jelly(X + 35.5, 3.6, 16, { color: 0xffd23f, fn: (t) => V3(0, 0, Math.sin(t * 0.9) * 2) }); berry(X + 35.5, 10.2, 16);
+  jelly(X + 41, 5.0, 16, { color: 0xb58cff }); jelly(X + 46.5, 6.4, 16, { color: 0x5ac8ff });
+  cookieDisc(X + 54.5, 8, 16, 5.2);
+  spawnStar('jelly', V3(X + 55.5, 9.3, 16), { silent: true });
+  heartPickup(X + 57, 8.5, 13.5); place('donut-sprinkles', X + 57, 8, 18.5, { s: 8 });
+  npc('carrot', 'Carota Glassata', X + 17.5, 12, 3.4, () => G.stars.has('jelly') ? ['You bounced all the way up! I got dizzy just watching.'] : [
+    'See those wobbly jelly pads? They go all the way up to the big biscuit in the sky.',
+    'You bounce by yourself. Just steer — and hold jump when you need more height.',
+    'The yellow one slides from side to side. If you fall in the chocolate, hop out fast!',
+  ], { y: Y, eyes: { hf: 0.7, spread: 0.12, size: 0.07 } });
+
+  // --- Biscuit Rafts to Isola Bignè (west) ---
+  cookieDisc(X - 26.75, Y, 16, 1.9, (t) => V3(Math.sin(t * 0.5) * 4.25, 0, 0));
+  cookieDisc(X - 35, Y, 16, 1.9, (t) => V3(0, 0, Math.sin(t * 0.6 + 1) * 5)); berry(X - 35, Y + 2.3, 16);
+  ember(X - 31, 11.5, { dz: 9, height: 3.4, period: 2.6, w: 4 }); ember(X - 38.6, 20.5, { dz: -9, height: 3.4, period: 3, phase: 1.2, w: 4 });
+  terrainBox(X - 54, X - 40, -4, Y, 7, 25, BI);
+  checkpoint(X - 42, Y, 22.5); heartPickup(X - 42, Y + 0.5, 9.5); crate(X - 52, 9, 'berry', Y);
+  place('whipped-cream', X - 50, Y, 21, { s: 14, solid: true, shrink: 0.3 }); lolly(-52.5, 23.5);
+  terrainBox(X - 49, X - 46, Y, Y + 1.5, 14.5, 17.5, PL);
+  spawnStar('raft', V3(X - 47.5, Y + 2.8, 16), { silent: true });
+  steak(X - 44, 12, w4('polpetta', 3));
+  npc('onion', 'Cipollotto', X - 44, 20, 8, ['You rode the biscuit rafts! I have been stuck on Isola Bignè since the meatballs came.', 'Those chocolate-coated fish bones only leap — dodge them, you cannot bop them.', 'The star on the plate is yours, Capitano!'], { y: Y, eyes: { hf: 0.5 } });
 }
 
 const clouds = [];
@@ -2213,7 +2487,7 @@ function togglePause() {
   if (G.mode === 'play') {
     G.mode = 'pause'; sfx.pause(); document.exitPointerLock?.();
     const li = (id) => `<li class="${G.stars.has(id) ? 'got' : 'no'}">${G.stars.has(id) ? '★' : '☆'} ${STAR_NAMES[id]}</li>`;
-    const worlds = [['Garden Isle', STAR_ORDER, true], ['Isola Brace', STAR_ORDER2, world1Stars() >= 7], ['Mare Surgelato', STAR_ORDER3, world2Stars() >= 5]];
+    const worlds = [['Garden Isle', STAR_ORDER, true], ['Isola Brace', STAR_ORDER2, world1Stars() >= 7], ['Mare Surgelato', STAR_ORDER3, world2Stars() >= 5], ['Dolceterra', STAR_ORDER4, world3Stars() >= 5]];
     $('starlist').innerHTML = worlds.map(([name, order, open], i) => {
       if (!open && i + 1 !== G.world) return `<li class="hd">??? <span class="n">locked</span></li>`;
       const hd = `<li class="hd">${name} <span class="n">${starsIn(order)} / ${order.length}</span></li>`;
@@ -2255,7 +2529,7 @@ function frame() {
         if (G.mode === 'play' || G.mode === 'starget') updatePlayer(STEP_DT);
         for (const e of enemies) {
           if (e.gone) continue;
-          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else if (e.kind === 'ember') updateEmber(e, STEP_DT); else if (e.kind === 'tuna') updateTuna(e, STEP_DT); else updateBoss(e, STEP_DT);
+          if (e.kind === 'steak') updateSteak(e, STEP_DT); else if (e.kind === 'fish') updateFish(e, STEP_DT); else if (e.kind === 'ember') updateEmber(e, STEP_DT); else if (e.kind === 'tuna') updateTuna(e, STEP_DT); else if (e.kind === 'hopboss') updateHopBoss(e, STEP_DT); else updateBoss(e, STEP_DT);
         }
       }
       updateFloes(dt); updateRun(dt); updateWinds(dt);
@@ -2267,6 +2541,10 @@ function frame() {
       if (G.starT > 2.8) {
         G.mode = 'play'; startAction('normal');
         if (G.stars.size >= TOTAL_STARS && !G.endingShown) { G.endingShown = true; G.mode = 'ending'; $('ending').style.display = 'flex'; document.exitPointerLock?.(); }
+        else if (world3Stars() >= 5 && !G.gate4Announced) {
+          G.gate4Announced = true; sfx.appear();
+          openDialog('The Candy Gate', ['The 5 Golden Stars of Mare Surgelato shine together… and the cold air suddenly smells of vanilla!', 'The pink Candy Gate on the arrival floe, next to the Ice Gate, has woken up.', 'Step through it to reach Dolceterra, the Sugar Isles — 5 more Golden Stars are waiting there!']);
+        }
         else if (world2Stars() >= 5 && !G.gate3Announced) {
           G.gate3Announced = true; sfx.appear();
           openDialog('The Ice Gate', ['The 5 Golden Stars of Isola Brace shine together… and a cold wind blows across the dock!', 'The frosty Ice Gate on the arrival dock, next to the Star Gate, has woken up.', 'Step through it to reach Mare Surgelato, the Frozen Sea — 5 more Golden Stars are waiting there!']);
@@ -2280,7 +2558,7 @@ function frame() {
     if (G.mode === 'travel') {
       G.travelT += dt;
       if (!G.travelDone && G.travelT > 0.5) { G.travelDone = true; arriveWorld(G.travelTo); $('fade').classList.remove('on'); }
-      if (G.travelT > 1.0) { G.mode = 'play'; banner(G.world === 3 ? 'MARE SURGELATO<small>The Frozen Sea — do not swim for long!</small>' : G.world === 2 ? 'ISOLA BRACE<small>The Ember Isle — mind the hot sauce!</small>' : 'GARDEN ISLE<small>Home sweet home</small>', 3); }
+      if (G.travelT > 1.0) { G.mode = 'play'; banner(WORLD_BANNER[G.world], 3); }
     }
     if (G.mode === 'dying') {
       G.dieT += dt; animatePlayer(dt);
@@ -2295,6 +2573,7 @@ function frame() {
     if (G.world === 3 && sim && Math.random() < dt * 16) { // snowfall
       burst(new THREE.Vector3(player.pos.x + (Math.random() - 0.5) * 44, player.pos.y + 9 + Math.random() * 5, player.pos.z + (Math.random() - 0.5) * 44), { n: 1, color: 0xffffff, speed: 0.6, size: 0.13, life: 3.6, grav: 4, up: -1.5 });
     }
+    for (const j of jellies) { j.wob = Math.max(0, j.wob - dt); j.m.scale.y = 1 - Math.sin(j.wob / 0.4 * Math.PI) * 0.35; }
     for (const b of belts) { b.tex.offset.x -= b.vx * dt / 2; b.tex.offset.y += b.vz * dt / 2; }
     for (const f of frozen) if (f.done) { f.t += dt; f.veg.position.y = f.pos.y + Math.abs(Math.sin(f.t * 4)) * 0.35; f.veg.rotation.y += dt * 1.2; }
     for (const s of springs) { s.t = Math.max(0, s.t - dt); s.o.scale.y = 2.6 * (1 - Math.sin(s.t / 0.4 * Math.PI) * 0.4); }
@@ -2303,6 +2582,7 @@ function frame() {
     updateHUD(dt);
   }
   for (const c of clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 160) c.position.x = -160; }
+  texChoc.offset.x = G.time * 0.006; texChoc.offset.y = Math.sin(G.time * 0.3) * 0.02;
   texLava.offset.x = G.time * 0.012; texLava.offset.y = Math.sin(G.time * 0.4) * 0.03;
   texWater.offset.x = G.time * 0.01; texWater.offset.y = Math.sin(G.time * 0.5) * 0.01;
   // sun follows the player so shadows stay crisp
@@ -2316,7 +2596,7 @@ function frame() {
 // ---------------------------------------------------------------------------
 (async () => {
   try { await loadAll(); } catch (e) { $('loading').textContent = 'Failed to load models: ' + e.message; throw e; }
-  setupPlayerModel(); buildLevel(); buildWorld2(); buildWorld3(); drawHealth();
+  setupPlayerModel(); buildLevel(); buildWorld2(); buildWorld3(); buildWorld4(); drawHealth();
   // already-collected stars from a previous session: re-spawn as ghost stars only where they are fixed
   $('loading').style.display = 'none'; $('title').style.display = 'flex'; G.mode = 'title';
   window.__game = { G, player, enemies, items, solids, camState, input, travel, gates, floes, frozen, thaw };

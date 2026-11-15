@@ -3,7 +3,8 @@
 A 3D collect-the-stars platformer in the browser. Capitan Pachino, a tomato pirate, returns to the
 Garden Isle to find it overrun: **vegetables are friends, steaks and fish are enemies**.
 Recover the 7 Golden Stars of the Garden Isle, then step through the Star Gate to Isola Brace
-for 5 more, and through the Ice Gate to Mare Surgelato for another 5.
+for 5 more, through the Ice Gate to Mare Surgelato for another 5, and through the Candy Gate
+to Dolceterra for 5 more.
 
 **Play:** https://sirmmo.github.io/pachino64/
 
@@ -64,6 +65,21 @@ you can swim, but the freezing water drains health.
 Sushi rolls aim and then roll in a straight line, so they can be baited off the ice. Frozen fish
 need a ground pound to crack their ice first. Il Tonno Padrino is only hurt by a ground pound
 while he flops on the ice.
+
+## World 4: Dolceterra
+
+Collecting the five stars of Mare Surgelato wakes the Candy Gate on its arrival floe. Dolceterra,
+the Sugar Isles, floats in melted chocolate: you sink in it, so hop out at once. Jelly pads bounce
+you (hold jump for more height) and caramel is sticky.
+
+18. Barone Tacchino of the Torta Reale
+19. The Great Jelly Jump
+20. Biscuit Rafts to Isola Bignè
+21. Eight Wild Strawberries
+22. Meatball Roundup
+
+Meatballs never stop hopping while they chase you, and will follow you off an edge. Barone Tacchino
+hops three times, sending a shockwave on each landing, and is then out of breath.
 
 ## Run locally
 
