@@ -64,7 +64,8 @@ you can swim, but the freezing water drains health.
 17. Thaw the Frozen Villagers
 
 Sushi rolls aim and then roll in a straight line, so they can be baited off the ice. Frozen fish
-need a ground pound to crack their ice first. Il Tonno Padrino is only hurt by a ground pound
+wear an ice block: the first hit (slash, stomp or ground pound) cracks it, the second finishes them.
+Frozen villagers are freed by slashing their block. Il Tonno Padrino is hurt by a slash or a stomp
 while he flops on the ice.
 
 ## World 4: Dolceterra

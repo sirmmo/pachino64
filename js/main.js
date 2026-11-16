@@ -707,7 +707,7 @@ const STEAK_TYPES = {
   ribs: { model: 'meat-ribs', s: 4.4, speed: 3.6, r: 0.9, h: 1.7, armored: true },
   sausage: { model: 'sausage', s: 5, speed: 6.6, r: 0.55, h: 1.9 },
   maki: { model: 'maki-salmon', s: 12, speed: 5, r: 0.75, h: 1.45, roller: true },    // aims, then rolls in a straight line
-  frozen: { model: 'fish', s: 3.3, speed: 2.4, r: 0.8, h: 2.1, iced: true },          // ground pound cracks the ice first
+  frozen: { model: 'fish', s: 2.7, speed: 2.4, r: 0.75, h: 1.7, iced: true },         // a slash, a stomp or a ground pound cracks the ice first
   polpetta: { model: 'meat-patty', s: 6, speed: 4.6, r: 0.75, h: 1.9, hopper: true },      // never stops hopping while it chases
   burger: { model: 'burger', s: 5, speed: 3.8, r: 1.0, h: 1.3, tough: true },               // takes two hits: the bun flies off first
   hotdog: { model: 'hot-dog', s: 3.4, speed: 6.4, r: 0.6, h: 2.0 },
@@ -731,7 +731,7 @@ function steak(x, z, { cooked = false, y = null, range = 6, type = null, w = 1 }
   else if (type === 'frozen') { const turn = new THREE.Group(); turn.rotation.y = Math.PI / 2; turn.add(body); tilt.add(turn); }
   else tilt.add(body);
   addEyes(tilt, type === 'burger' ? { hf: 0.55, size: 0.24, spread: 0.2, angry: true } : type === 'hotdog' ? { hf: 0.72, size: 0.12, spread: 0.2, angry: true } : type === 'sausage' ? { hf: 0.74, size: 0.13, spread: 0.2, angry: true } : type === 'maki' ? { hf: 0.6, size: 0.13, spread: 0.16, angry: true } : type === 'frozen' ? { hf: 0.74, size: 0.1, spread: 0.13, angry: true } : { hf: 0.68, size: 0.09, spread: 0.2, angry: true });
-  if (type === 'frozen') { ice = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.5, 1.7), matIceBlock); ice.position.y = 1.25; tilt.add(ice); }
+  if (type === 'frozen') { ice = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.0, 1.5), matIceBlock); ice.position.y = 1.0; tilt.add(ice); }
   const e = {
     kind: 'steak', type, w, armored: !!T.armored, roller: !!T.roller, iced: !!T.iced, hopper: !!T.hopper, tough: !!T.tough, spin, ice, root, tilt, body, home: new THREE.Vector3(x, gy, z), range, cooked,
     pos: root.position, vel: new THREE.Vector3(), r: T.r, h: T.h, onGround: true, alive: true, state: 'patrol', t: 0,
@@ -901,8 +901,7 @@ function updateSteak(e, dt) {
   const dx = player.pos.x - e.pos.x, dz = player.pos.z - e.pos.z, hd = Math.hypot(dx, dz);
   if (hd < e.r + player.r + 0.15 && dy > -1.5 && dy < e.h) {
     if (e.iced) {
-      if (player.action === 'gpFall') { crackIce(e); player.bounce(9); }
-      else if (player.vel.y < 0 && dy > e.h * 0.45) { player.bounce(12); sfx.hit(); toast('Frozen solid! Ground pound it to crack the ice!', 1.8); }
+      if (player.action === 'gpFall' || (player.vel.y < 0 && dy > e.h * 0.45)) { crackIce(e); player.bounce(player.action === 'gpFall' ? 9 : 12); }
       else hurtPlayer(1, e.pos);
     }
     else if (player.vel.y < 0 && dy > e.h * 0.45) { hitEnemy(e); player.bounce(player.action === 'gpFall' ? 8 : 12); }
@@ -1246,7 +1245,11 @@ function updatePlayer(dt) {
         startAction('gpLand'); sfx.pound(); ringFx(p.pos, { max: 2.6 }); shake = 0.2;
         burst(p.pos, { n: 10, color: 0xe8dcc0, speed: 5, life: 0.5 });
         if (p.ground && p.ground.crate) breakCrate(p.ground.crate);
-        for (const f of frozen) if (!f.done && Math.hypot(f.pos.x - p.pos.x, f.pos.z - p.pos.z) < 2.9 && p.pos.y - f.pos.y > -0.5 && p.pos.y - f.pos.y < f.h + 0.5) thaw(f);
+        for (const f of frozen) if (!f.done && Math.hypot(f.pos.x - p.pos.x, f.pos.z - p.pos.z) < 3.6 && p.pos.y - f.pos.y > -0.5 && p.pos.y - f.pos.y < f.h + 0.5) thaw(f);
+        for (const e of enemies) { // the shockwave cracks nearby ice and rattles a flopping tuna
+          if (!e.alive || Math.abs(e.pos.y - p.pos.y) > 2.5) continue; const d = Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z);
+          if (e.iced && d < 3.6) crackIce(e); else if (e.kind === 'tuna' && e.state === 'flop' && d < e.r + 3) hitTuna(e);
+        }
         for (const c of crates) if (c.alive && Math.hypot(c.o.position.x - p.pos.x, c.o.position.z - p.pos.z) < 2.6 && Math.abs(c.o.position.y - p.pos.y) < 1.5) breakCrate(c);
       } else if (['jump', 'jump3', 'backflip', 'longjump', 'slash'].includes(p.action)) startAction('normal');
       if (p.ground && p.ground.spring) {
@@ -1317,15 +1320,17 @@ function slashHits() {
     if (!spin && d > 0.8 && (dx * fx + dz * fz) / d < 0.2) continue;
     if (e.kind === 'ember') continue;
     if (e.kind === 'cleaver') { if (e.state === 'stuck') hitCleaver(e); continue; }
-    if (e.kind === 'tuna') { if (e.state === 'flop') { sfx.hit(); toast('His scales are too slippery — ground pound him!', 1.8); } continue; }
+    if (e.kind === 'tuna') { if (e.state === 'flop') hitTuna(e); continue; }
     if (e.kind === 'boss' || e.kind === 'hopboss') { if (e.state === 'stunned') hitBoss(e); else { sfx.hit(); toast('Too tough! Make him dizzy first!', 1.5); } }
-    else if (e.armored || e.iced) { // swords bounce off bones and ice
-      sfx.hit(); toast(e.iced ? 'Clink! Frozen solid — ground pound it!' : 'Clang! Too bony for a sword — stomp it!', 1.6);
+    else if (e.iced) { crackIce(e); e.vel.set(dx / (d || 1) * 6, 6, dz / (d || 1) * 6); } // the sword shatters the ice, a second hit finishes it
+    else if (e.armored) { // swords bounce off bones
+      sfx.hit(); toast('Clang! Too bony for a sword — stomp it!', 1.6);
       e.state = 'knock'; e.t = 0; e.onGround = false; e.vel.set(dx / (d || 1) * 8, 6.5, dz / (d || 1) * 8);
       burst(e.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 6, color: 0xffffff, speed: 4, life: 0.3 });
     }
     else hitEnemy(e, 'slash');
   }
+  for (const f of frozen) if (!f.done && Math.hypot(f.pos.x - p.pos.x, f.pos.z - p.pos.z) < 3 && p.pos.y - f.pos.y > -1 && p.pos.y - f.pos.y < f.h + 0.5) thaw(f);
   for (const c of crates) {
     if (!c.alive) continue; const cp = c.o.position; const d = Math.hypot(cp.x - p.pos.x, cp.z - p.pos.z);
     if (d < 2.3 && Math.abs(cp.y - p.pos.y) < 1.6) breakCrate(c);
@@ -1858,7 +1863,7 @@ function updateWinds(dt) {
     }
   }
 }
-// Frozen villagers: vegetables stuck in ice blocks, freed with a ground pound
+// Frozen villagers: vegetables stuck in ice blocks, freed with a slash or a ground pound nearby
 const frozen = [];
 function frozenVillager(model, s, x, y, z, name) {
   const veg = inst(model, s); veg.position.set(x, y, z); scene.add(veg); addEyes(veg, { size: 0.12, hf: 0.55 });
@@ -1875,7 +1880,7 @@ function thaw(f) {
   if (G.thawed === 5) spawnStar('thaw', V3(W3X - 3, 3.7, 13));
 }
 // Boss: Il Tonno Padrino. Swims under the ice (watch the shadow), bursts up where you stand,
-// then flops on the ice for a moment — that is when a ground pound hurts him.
+// then flops on the ice for a moment — that is when a slash, a stomp or a ground pound hurts him.
 function makeTuna(x, y, z, arena) {
   const root = new THREE.Group(); root.position.set(x, y + 1.44, z); scene.add(root);
   const tilt = new THREE.Group(); root.add(tilt);
@@ -1917,7 +1922,7 @@ function updateTuna(b, dt) {
       T.rotation.set(0, 0, Math.sin(b.t * 1.5) * 0.05);
       if (inArena && G.mode === 'play') {
         b.state = 'intro'; b.t = 0;
-        openDialog('Il Tonno Padrino', ['BLUB BLUB! Who is skating on MY frozen hold?!', 'I am Il Tonno Padrino, godfather of the Frozen Sea. Nobody stomps the Padrino!', '(Tip: watch his shadow under the ice and keep moving. When he flops onto the ice, GROUND POUND him — jump, then crouch in the air.)']);
+        openDialog('Il Tonno Padrino', ['BLUB BLUB! Who is skating on MY frozen hold?!', 'I am Il Tonno Padrino, godfather of the Frozen Sea. Nobody stomps the Padrino!', '(Tip: watch his shadow under the ice and keep moving. When he flops onto the ice he is helpless: slash him with your sword, or jump on him.)']);
       }
       break;
     case 'intro': if (G.mode === 'play') { b.state = 'dive'; b.t = 0; } break;
@@ -1972,8 +1977,7 @@ function updateTuna(b, dt) {
     if (d < 1.5 + p.r && p.pos.y < b.pos.y + 3 && p.pos.y + p.h > b.pos.y - 3) hurtPlayer(2, V3(b.pos.x, p.pos.y, b.pos.z));
   } else if (b.state === 'flop' && d < b.r + p.r && p.pos.y - fy > -1 && p.pos.y - fy < 2.4) {
     const a = Math.atan2(dx, dz);
-    if (p.action === 'gpFall') { hitTuna(b); p.bounce(14); p.vel.x = Math.sin(a) * 8; p.vel.z = Math.cos(a) * 8; }
-    else if (p.vel.y < 0 && p.pos.y - fy > 1) { p.bounce(12); sfx.hit(); toast('Boing! Too slippery — GROUND POUND him!', 1.8); p.vel.x = Math.sin(a) * 6; p.vel.z = Math.cos(a) * 6; }
+    if (p.action === 'gpFall' || (p.vel.y < 0 && p.pos.y - fy > 1)) { hitTuna(b); p.bounce(14); p.vel.x = Math.sin(a) * 8; p.vel.z = Math.cos(a) * 8; }
     else { p.pos.x = b.pos.x + Math.sin(a) * (b.r + p.r); p.pos.z = b.pos.z + Math.cos(a) * (b.r + p.r); }
   }
 }
@@ -2052,7 +2056,7 @@ function buildWorld3() {
   scarf(npc('cauliflower', 'Nonna Cavolfiore', X + 5.5, 24.5, 5, () => {
     if (G.thawed >= 5) return ['All five are free! Thank you, Capitano — hot chocolate is on me.'];
     return ['Oh dear, oh dear. The fish froze five of my neighbours into blocks of ice!',
-      'A sword only scratches the ice. Jump next to a block — or on top of it — and GROUND POUND to shatter it.',
+      'Walk up to a block and slash it with your sword — the ice shatters. A ground pound next to it works too.',
       `${5 - G.thawed} of them are still frozen: two here in the piazza, one on the trawler, one by the lighthouse and one past the sushi belts.`];
   }, { y: Y, eyes: { hf: 0.55 } }), 0xffd23f);
 
@@ -2078,7 +2082,7 @@ function buildWorld3() {
   scarf(npc('leek', 'Porro the Deckhand', X - 5.5, -15.5, 3.6, () => G.stars.has('tuna') ? ['The old trawler is ours again. The Padrino is on ice — for good!'] : [
     'Psst, Capitano! The hold of this trawler is flooded and frozen over. Il Tonno Padrino lives under the ice.',
     'You will see his shadow following you. Keep moving! He bursts up right where you stand.',
-    'After the leap he flops on the ice for a moment. A sword or a stomp just slides off — GROUND POUND him. Four times!',
+    'After the leap he flops on the ice for a moment. Run in and slash him, or jump on him. Four times!',
   ], { y: 3, eyes: { hf: 0.55 } }), 0x3fa34d);
   makeTuna(X, 3.06, -32, { x0: X - 9, x1: X + 9, z0: -42, z1: -22, y: 3.06 });
 
@@ -2623,7 +2627,7 @@ function buildWorld5() {
   npc('eggplant', 'Signora Melanzana', X - 46.5, 24.5, 4.2, () => G.stars.has('fridge') ? ['Brrr! You went all the way to the top shelf. I will stay down here, thank you.'] : [
     'Psst, Capitano! This is the Chef\'s fridge. A Golden Star is on the top shelf.',
     'Hop up the ice cubes from shelf to shelf. The shelves are icy, so you will slide!',
-    'The frozen fish need a ground pound before anything else hurts them. And the cracked ice cube will not hold you for long.',
+    'The frozen fish wear an ice block: the first hit cracks it, the second finishes them. And the cracked ice cube will not hold you for long.',
   ], { y: Y, eyes: { hf: 0.6 } });
 }
 
