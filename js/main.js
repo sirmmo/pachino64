@@ -323,7 +323,8 @@ async function loadAll() {
   for (const n of FOOD) jobs.push(loadGLB(`models/food/${n}.glb`).then((s) => (models[n] = s)));
   for (const n of PLAT) jobs.push(loadGLB(`models/platformer/${n}.glb`).then((s) => (models[n] = s)));
   jobs.push(loadGLB('models/pachino.glb').then((s) => (models.pachino = s)));
-  await Promise.all(jobs);
+  let done = 0; // for Wavedash's loading bar
+  await Promise.all(jobs.map((j) => j.then(() => window.WavedashHook?.progress(++done / jobs.length))));
 }
 function inst(name, scale = 1, shadow = true) {
   const o = models[name].clone(true);
@@ -2934,10 +2935,11 @@ function frame() {
 // Boot
 // ---------------------------------------------------------------------------
 (async () => {
-  try { await loadAll(); } catch (e) { $('loading').textContent = 'Failed to load models: ' + e.message; throw e; }
+  try { await loadAll(); } catch (e) { $('loading').textContent = 'Failed to load models: ' + e.message; window.WavedashHook?.ready(); throw e; }
   setupPlayerModel(); buildLevel(); buildWorld2(); buildWorld3(); buildWorld4(); buildWorld5(); drawHealth();
   // already-collected stars from a previous session: re-spawn as ghost stars only where they are fixed
   $('loading').style.display = 'none'; $('title').style.display = 'flex'; G.mode = 'title';
+  window.WavedashHook?.ready(); // on Wavedash: loaded, show the title screen
   window.__game = { G, player, enemies, items, solids, camState, input, travel, gates, floes, frozen, thaw };
   frame();
 })();

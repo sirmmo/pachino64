@@ -1,0 +1,8 @@
+# Capitan Pachino 64 on Wavedash. tools/wavedash.sh fills _wavedash/ and runs `wavedash build push` here.
+# game_id: the project id from the Wavedash Developer Portal, or from
+# `wavedash project create --title "Capitan Pachino 64" --team-id <TEAM_ID>`.
+# WAVEDASH_GAME_ID overrides it (the CLI reads it); tools/wavedash.sh also takes WAVEDASH_GAME_ID_PACHINO64
+# (in CI, the repository variable of that name), so the id need not be committed.
+game_id = "j9751ssr83vnd6cgg5za5mdbrx8jwt67"
+upload_dir = "_wavedash"
+entrypoint = "index.html"

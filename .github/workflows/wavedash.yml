@@ -1,0 +1,42 @@
+# Uploads Capitan Pachino 64 to Wavedash (https://wavedash.com) as a new build, by hand only
+# (Actions > Wavedash > Run workflow). Publishing a build stays a separate step:
+# `wavedash publish <BUILD_ID>`, or the Developer Portal.
+# Needs the repository secret WAVEDASH_TOKEN and the repository variable WAVEDASH_GAME_ID_PACHINO64
+# with the game's Wavedash project id.
+name: Wavedash
+
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        description: Game to upload
+        type: choice
+        options: [all, pachino64]
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wavedash
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The game is plain files: nothing to build.
+      - name: Install the Wavedash CLI
+        run: |
+          curl -fsSL https://wavedash.com/cli/install.sh | sh
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
+      - name: Build and upload
+        run: |
+          wavedash --version
+          sh tools/wavedash.sh "$GAME"
+        env:
+          GAME: ${{ inputs.game }}
+          WAVEDASH_TOKEN: ${{ secrets.WAVEDASH_TOKEN }}
+          WAVEDASH_MESSAGE: Build ${{ github.sha }}
+          WAVEDASH_GAME_ID_PACHINO64: ${{ vars.WAVEDASH_GAME_ID_PACHINO64 }}
