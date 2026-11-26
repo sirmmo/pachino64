@@ -460,9 +460,30 @@ const G = {
   world: 1, lemons: 0, gateCool: 0, gateAnnounced: STAR_ORDER.every((id) => saved.includes(id)),
   pickles: 0, gate5Announced: STAR_ORDER4.every((id) => saved.includes(id)),
   berries: 0, gate4Announced: STAR_ORDER3.every((id) => saved.includes(id)),
-  peas: 0, thawed: 0, coldT: 0, runT: 0, gate3Announced: STAR_ORDER2.every((id) => saved.includes(id)),
+  peas: 0, thawed: 0, coldT: 0, runT: 0, hurts: 0, fightHurts: -1, gate3Announced: STAR_ORDER2.every((id) => saved.includes(id)),
 };
 function saveGame() { try { localStorage.setItem('pachino64', JSON.stringify({ stars: [...G.stars] })); } catch (e) { /* storage blocked */ } }
+
+// Achievements: achievements.json at the root, tracked by openachievements (vendor/openachievements,
+// started in index.html). Without it every call does nothing. Kept cheap: a one-off unlock is sent
+// once per visit, and coins are reported in chunks of 10 (and when pausing, on a star, on leaving).
+const BOSS_STARS = { boss: 'KING_STEAK', ham: null, tuna: null, turkey: null, cleaver: 'MANNARONE' };
+const achSent = new Set();
+const ach = {
+  coins: 0,
+  unlock(id) { if (!achSent.has(id)) { achSent.add(id); window.openachievements?.unlock(id); } },
+  add(stat, n = 1) { window.openachievements?.add(stat, n); },
+  set(stat, v) { window.openachievements?.set(stat, v); },
+  flushCoins() { if (ach.coins > 0) { window.openachievements?.add('coins_collected', ach.coins); ach.coins = 0; } },
+  isOpen: () => !!document.querySelector('.oa-shade'),
+  close() { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }, // the panel closes on Esc
+  open() {
+    if (!window.openachievements || ach.isOpen()) return;
+    if (G.mode === 'play') togglePause(); // the game waits under the panel
+    window.openachievements.showList();
+  },
+};
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') ach.flushCoins(); });
 
 let toastT = 0, bannerT = 0;
 function toast(msg, t = 2.2) { $('toast').textContent = msg; $('toast').classList.add('show'); toastT = t; }
@@ -492,10 +513,11 @@ function drawHealth() {
   s += `<text y="9" text-anchor="middle" font-family="Luckiest Guy" font-size="24" fill="#fff">${G.health}</text>`;
   svg.innerHTML = s;
 }
-function setHealth(h) { G.health = clamp(h, 0, 8); G.healthShow = 3; drawHealth(); }
+function setHealth(h) { if (h < G.health) G.hurts++; G.health = clamp(h, 0, 8); G.healthShow = 3; drawHealth(); }
 function addCoins(n) {
   G.coins += n; heal(n);
-  if (G.coins >= G.nextLifeAt) { G.nextLifeAt += 50; G.lives++; sfx.oneup(); toast('1-UP!'); }
+  ach.coins += n; if (ach.coins >= 10) ach.flushCoins();
+  if (G.coins >= G.nextLifeAt) { G.nextLifeAt += 50; G.lives++; sfx.oneup(); toast('1-UP!'); ach.unlock('ONE_UP'); }
   if (G.coins >= 100 && !G.coinStarSpawned) {
     G.coinStarSpawned = true;
     spawnStar('coins', player.pos.clone().add(new THREE.Vector3(0, 3.5, 0)));
@@ -529,6 +551,11 @@ function makeStarMesh(id) {
 }
 function spawnStar(id, pos, { silent = false } = {}) {
   if (starMeshes[id]) return;
+  if (id in BOSS_STARS) { // a boss's star appears when the boss is beaten
+    if (BOSS_STARS[id]) ach.unlock(BOSS_STARS[id]);
+    if (G.fightHurts === G.hurts) ach.unlock('NO_SCRATCH');
+    G.fightHurts = -1;
+  }
   const m = makeStarMesh(id);
   const it = addItem('star', m, pos, { id, r: 1.4 }); starMeshes[id] = it;
   if (!silent) { sfx.appear(); burst(pos, { n: 24, color: 0xffe066, speed: 7, life: 1 }); toast('A Golden Star appeared!'); }
@@ -802,7 +829,7 @@ function makeBoss(x, y, z, arena, cfg = {}) {
   enemies.push(b); return b;
 }
 function killEnemy(e, how = 'stomp') {
-  if (!e.alive) return; e.alive = false;
+  if (!e.alive) return; e.alive = false; ach.add('enemies_defeated');
   const p = e.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
   burst(p, { n: 16, color: 0xffffff, speed: 5, size: 0.35, life: 0.6 });
   if (e.kind === 'steak') {
@@ -989,7 +1016,7 @@ function updateBoss(b, dt) {
     case 'sleep':
       b.tilt.rotation.x = 0.1 + Math.sin(b.t * 1.5) * 0.05;
       if (inArena && G.mode === 'play') {
-        b.state = 'intro'; b.t = 0;
+        b.state = 'intro'; b.t = 0; G.fightHurts = G.hurts;
         openDialog(b.cfg.name, b.cfg.intro);
       }
       break;
@@ -1119,7 +1146,7 @@ function doJump() {
   } else {
     const chain = G.time - p.lastLand < 0.22;
     if (chain && p.jumpKind === 1 && hs > 3) { p.jumpKind = 2; p.vel.y = 14; sfx.jump2(); startAction('jump'); }
-    else if (chain && p.jumpKind === 2 && hs > 6) { p.jumpKind = 3; p.vel.y = 17.5; sfx.jump3(); startAction('jump3'); }
+    else if (chain && p.jumpKind === 2 && hs > 6) { p.jumpKind = 3; p.vel.y = 17.5; sfx.jump3(); startAction('jump3'); ach.unlock('TRIPLE_JUMP'); }
     else { p.jumpKind = 1; p.vel.y = 11.5; sfx.jump(); startAction('jump'); }
   }
   if (p.ground && p.ground.sticky) p.vel.y *= 0.72; // caramel holds on to your boots
@@ -1195,7 +1222,7 @@ function updatePlayer(dt) {
     if (p.jumpBuf > 0 && (p.onGround || p.coyote > 0)) doJump();
     else if (p.jumpBuf > 0 && air && p.wallN && G.time - p.wallT < 0.2 && p.wallSpeed > 2) { // wall kick
       p.vel.x = p.wallN.x * 9; p.vel.z = p.wallN.z * 9; p.vel.y = 14; p.facing = Math.atan2(p.wallN.x, p.wallN.z);
-      startAction('jump3'); p.jumpKind = 3; p.jumpBuf = 0; p.airSlashed = false; sfx.jump3(); p.wallN = null;
+      startAction('jump3'); p.jumpKind = 3; p.jumpBuf = 0; p.airSlashed = false; sfx.jump3(); p.wallN = null; ach.unlock('WALL_KICK');
       burst(p.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 6, color: 0xffffff, speed: 3, life: 0.3 });
     }
     // variable jump height
@@ -1272,7 +1299,7 @@ function updatePlayer(dt) {
   const rr = Math.hypot(p.pos.x - wcx, p.pos.z); if (rr > wR) { p.pos.x = wcx + (p.pos.x - wcx) * wR / rr; p.pos.z *= wR / rr; }
   // hot sauce: ouch, and a big bounce so you can steer back to land
   if (G.world === 2 && p.pos.y < LAVA + 0.1 && G.mode === 'play') {
-    p.pos.y = LAVA + 0.1; p.bounce(19); p.jumpKind = 0; sfx.splash();
+    p.pos.y = LAVA + 0.1; p.bounce(19); p.jumpKind = 0; sfx.splash(); ach.unlock('EXTRA_SPICY');
     burst(p.pos.clone(), { n: 12, color: 0xff9a2a, speed: 5, life: 0.6, grav: 15, up: 6 });
     if (p.invuln <= 0) { setHealth(G.health - 1); sfx.hurt(); p.invuln = 1.0; if (G.health <= 0) killPlayer(); }
   }
@@ -1379,7 +1406,9 @@ function animatePlayer(dt) {
 // ---------------------------------------------------------------------------
 function collectStar(id) {
   const first = !G.stars.has(id);
+  if (id === 'belt' && G.runT >= 8) ach.unlock('SUSHI_EXPRESS'); // 20 s on the clock: 12 s or less
   G.stars.add(id); saveGame(); delete starMeshes[id]; if (id === 'belt') G.runT = 0;
+  ach.flushCoins(); ach.set('golden_stars', G.stars.size);
   G.mode = 'starget'; G.starT = 0; startAction('star'); player.vel.set(0, 0, 0);
   sfx.star(); setHealth(8);
   burst(player.pos.clone().add(new THREE.Vector3(0, 1.5, 0)), { n: 40, color: 0xffe066, speed: 9, life: 1.2 });
@@ -1922,7 +1951,7 @@ function updateTuna(b, dt) {
     case 'sleep':
       T.rotation.set(0, 0, Math.sin(b.t * 1.5) * 0.05);
       if (inArena && G.mode === 'play') {
-        b.state = 'intro'; b.t = 0;
+        b.state = 'intro'; b.t = 0; G.fightHurts = G.hurts;
         openDialog('Il Tonno Padrino', ['BLUB BLUB! Who is skating on MY frozen hold?!', 'I am Il Tonno Padrino, godfather of the Frozen Sea. Nobody stomps the Padrino!', '(Tip: watch his shadow under the ice and keep moving. When he flops onto the ice he is helpless: slash him with your sword, or jump on him.)']);
       }
       break;
@@ -2185,7 +2214,7 @@ function updateHopBoss(b, dt) {
   switch (b.state) {
     case 'sleep':
       b.tilt.rotation.x = 0.08 + Math.sin(b.t * 1.5) * 0.04;
-      if (inArena && G.mode === 'play') { b.state = 'intro'; b.t = 0; openDialog(C.name, C.intro); }
+      if (inArena && G.mode === 'play') { b.state = 'intro'; b.t = 0; G.fightHurts = G.hurts; openDialog(C.name, C.intro); }
       break;
     case 'intro': if (G.mode === 'play') { b.state = 'crouch'; b.t = 0; b.hops = 0; b.tilt.rotation.x = 0; } break;
     case 'wait': if (inArena) { b.state = 'crouch'; b.t = 0; b.hops = 0; } break;
@@ -2456,7 +2485,7 @@ function updateCleaver(b, dt) {
     case 'sleep':
       b.tilt.rotation.z = 0.06;
       if (inArena && G.mode === 'play') {
-        b.state = 'intro'; b.t = 0; b.tilt.rotation.z = 0;
+        b.state = 'intro'; b.t = 0; G.fightHurts = G.hurts; b.tilt.rotation.z = 0;
         openDialog('Il Mannarone', ['SHHHING! So YOU are the tomato who ruined all my master\'s recipes!', 'I am Il Mannarone, the Chef\'s own cleaver. Steak, ham, tuna, turkey — I chopped for all of them. Now I chop YOU!', '(Tip: watch the shadow and step out from under it. When he is stuck in the board, hit him with your SWORD. Stomping a blade is a bad idea.)']);
       }
       break;
@@ -2697,12 +2726,14 @@ const keys = new Set();
 const KEYMAP = { jump: ['Space', 'KeyK'], crouch: ['ShiftLeft', 'ShiftRight', 'KeyZ'], attack: ['KeyJ', 'KeyX'], talk: ['KeyE'] };
 window.addEventListener('keydown', (e) => {
   if (e.repeat) { if (e.code === 'Space') e.preventDefault(); return; }
+  if (ach.isOpen()) { if (e.code === 'KeyL') ach.close(); return; } // the achievements panel has the keys
   keys.add(e.code); initAudio();
   if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
   if (G.mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) { startGame(); return; }
   if (G.mode === 'dialog' && ['Space', 'KeyE', 'KeyJ', 'Enter', 'KeyK'].includes(e.code)) { advanceDialog(); return; }
   if (e.code === 'Escape' || e.code === 'KeyP' || (e.code === 'Enter' && (G.mode === 'play' || G.mode === 'pause'))) { togglePause(); return; }
   if (e.code === 'KeyM') toast(toggleMute() ? 'Sound off' : 'Sound on', 1.2);
+  if (e.code === 'KeyL' && (G.mode === 'title' || G.mode === 'play' || G.mode === 'pause')) { ach.open(); return; }
   if (KEYMAP.jump.includes(e.code)) input.jumpP = true;
   if (KEYMAP.crouch.includes(e.code)) input.crouchP = true;
   if (KEYMAP.attack.includes(e.code)) input.attackP = true;
@@ -2802,6 +2833,8 @@ function pollInput() {
     const edge = (i) => { const k = gp.index + ':' + i; const now = b(i); const was = padPrev[k]; padPrev[k] = now; return now && !was; };
     if (b(12)) y += 1; if (b(13)) y -= 1; if (b(14)) x -= 1; if (b(15)) x += 1;
     if (b(0)) jump = true; if ([4, 5, 6, 7].some(b)) crouch = true;
+    if (edge(8) && !ach.isOpen() && (G.mode === 'title' || G.mode === 'play' || G.mode === 'pause')) ach.open(); // Select / Back
+    if (ach.isOpen()) { if (edge(1) | edge(9) | edge(8)) ach.close(); continue; }
     if (edge(0)) { initAudio(); if (G.mode === 'title') startGame(); else if (G.mode === 'dialog') advanceDialog(); else input.jumpP = true; }
     if (edge(2) || edge(1)) { if (G.mode === 'dialog') advanceDialog(); else input.attackP = true; }
     if (edge(3)) input.talkP = true;
@@ -2821,7 +2854,7 @@ function startGame() {
 }
 function togglePause() {
   if (G.mode === 'play') {
-    G.mode = 'pause'; sfx.pause(); document.exitPointerLock?.();
+    G.mode = 'pause'; sfx.pause(); document.exitPointerLock?.(); ach.flushCoins();
     const li = (id) => `<li class="${G.stars.has(id) ? 'got' : 'no'}">${G.stars.has(id) ? '★' : '☆'} ${STAR_NAMES[id]}</li>`;
     const worlds = [['Garden Isle', STAR_ORDER, true], ['Isola Brace', STAR_ORDER2, world1Stars() >= 7], ['Mare Surgelato', STAR_ORDER3, world2Stars() >= 5], ['Dolceterra', STAR_ORDER4, world3Stars() >= 5], ['La Grande Cucina', STAR_ORDER5, world4Stars() >= 5]];
     $('starlist').innerHTML = worlds.map(([name, order, open], i) => {
@@ -2833,7 +2866,10 @@ function togglePause() {
   } else if (G.mode === 'pause') { G.mode = 'play'; $('pause').style.display = 'none'; sfx.pause(); }
 }
 $('resume').onclick = () => togglePause();
-$('continue').onclick = () => { $('gameover').style.display = 'none'; G.lives = 4; G.mode = 'play'; respawnFresh(); };
+$('pauseAch').onclick = () => ach.open();
+for (const ev of ['mousedown', 'touchstart']) $('titleAch').addEventListener(ev, (e) => e.stopPropagation()); // not a click to start
+$('titleAch').onclick = () => ach.open();
+$('continue').onclick = () => { ach.unlock('NEVER_GIVE_UP'); $('gameover').style.display = 'none'; G.lives = 4; G.mode = 'play'; respawnFresh(); };
 $('keepplaying').onclick = () => { $('ending').style.display = 'none'; G.mode = 'play'; };
 function respawnFresh() { player.pos.copy(G.checkpoint); player.vel.set(0, 0, 0); player.dead = false; player.action = 'normal'; player.invuln = 2; setHealth(8); pPivot.rotation.set(0, 0, 0); camState.snap = true; }
 
@@ -2940,6 +2976,7 @@ function frame() {
   // already-collected stars from a previous session: re-spawn as ghost stars only where they are fixed
   $('loading').style.display = 'none'; $('title').style.display = 'flex'; G.mode = 'title';
   window.WavedashHook?.ready(); // on Wavedash: loaded, show the title screen
-  window.__game = { G, player, enemies, items, solids, camState, input, travel, gates, floes, frozen, thaw };
+  if (G.stars.size) ach.set('golden_stars', G.stars.size); // stars saved before achievements existed count too
+  window.__game = { G, player, enemies, items, solids, camState, input, travel, gates, floes, frozen, thaw, ach, collectStar, addCoins, killEnemy, togglePause, doJump };
   frame();
 })();

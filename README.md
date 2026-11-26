@@ -98,6 +98,23 @@ knives chop on a rhythm, steam lifts you, and the sink is deep enough to swim in
 Burgers take two hits (the bun flies off first). Il Mannarone hovers over you and chops: step out
 from under his shadow, and hit him with the sword while he is stuck in the board.
 
+## Achievements
+
+15 achievements (2 secret) and 3 stats, kept by the openachievements library: saved in the
+browser, and reported to Wavedash when the game runs there.
+
+- **The list**: the *Achievements* button on the title and pause screens, `L` on the keyboard,
+  or Select/Back on a gamepad. `Esc` (or `L`, or B/Start) closes it.
+- **The manifest**: `achievements.json` at the root (titles, descriptions, stats, thresholds, the
+  Wavedash game id). The library is vendored in `vendor/openachievements/` and started in `index.html`.
+- **Adding one**: add it to `achievements.json`. If it is a count, give it a `stat` and a
+  `threshold` (`golden_stars` is a best, set from the saved stars; `coins_collected` and
+  `enemies_defeated` count up). Otherwise call `ach.unlock('ID')` where it happens in `js/main.js`
+  (the `ach` helper sends each unlock once per visit and reports coins in chunks of 10). Check the
+  manifest with `cargo run -p openachievements-cli -- check achievements.json` in the
+  openachievements repository, and give Wavedash the JSON from its `wavedash` command (Developer
+  Portal › Achievements › Import JSON).
+
 ## Run locally
 
 It is a static site with no build step:
@@ -114,12 +131,14 @@ python3 -m http.server 8000
 - `js/audio.js` – synthesized sound effects and music (WebAudio)
 - `models/pachino.glb` – Capitan Pachino, simplified from the source model in `sample_*.zip`
 - `models/food`, `models/platformer` – Kenney Food Kit and Platformer Kit models
-- `vendor/` – three.js r160
+- `achievements.json` – achievements and stats (see Achievements)
+- `vendor/` – three.js r160, openachievements (`vendor/openachievements/`)
 
 ## Credits
 
 - Food Kit and Platformer Kit by [Kenney](https://kenney.nl) (CC0)
 - [three.js](https://threejs.org) (MIT)
+- openachievements (MIT, `vendor/openachievements/LICENSE-MIT`)
 
 ## Publishing on Wavedash
 

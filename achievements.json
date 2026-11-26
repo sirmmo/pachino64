@@ -1,0 +1,34 @@
+{
+  "game": "pachino64",
+  "stats": [
+    { "id": "golden_stars", "name": "Golden Stars collected", "kind": "best" },
+    { "id": "coins_collected", "name": "Coins collected" },
+    { "id": "enemies_defeated", "name": "Enemies defeated" }
+  ],
+  "achievements": [
+    { "id": "FIRST_STAR", "title": "Star Get", "description": "Collect a Golden Star.",
+      "stat": "golden_stars", "threshold": 1 },
+    { "id": "FIRST_FOE", "title": "Tenderized", "description": "Defeat an enemy.",
+      "stat": "enemies_defeated", "threshold": 1 },
+    { "id": "TRIPLE_JUMP", "title": "Triple Jump", "description": "Chain three jumps into a triple jump." },
+    { "id": "WALL_KICK", "title": "Off the Wall", "description": "Kick off a wall in mid-air." },
+    { "id": "ONE_UP", "title": "Extra Tomato", "description": "Earn an extra life by collecting 50 coins." },
+    { "id": "GARDEN_ISLE", "title": "Garden Isle Saved", "description": "Collect all 7 Golden Stars of the Garden Isle.",
+      "stat": "golden_stars", "threshold": 7 },
+    { "id": "KING_STEAK", "title": "Well Done", "description": "Defeat King Steak of Mount Grill." },
+    { "id": "MANNARONE", "title": "Blunt Edge", "description": "Defeat Il Mannarone, the Chef's Cleaver." },
+    { "id": "ALL_STARS", "title": "Every Star Home", "description": "Collect all 27 Golden Stars.",
+      "stat": "golden_stars", "threshold": 27 },
+    { "id": "COINS_500", "title": "Pirate's Hoard", "description": "Collect 500 coins.",
+      "stat": "coins_collected", "threshold": 500 },
+    { "id": "ENEMIES_50", "title": "Off the Menu", "description": "Defeat 50 enemies.",
+      "stat": "enemies_defeated", "threshold": 50 },
+    { "id": "NO_SCRATCH", "title": "Not a Scratch", "description": "Defeat a boss without taking any damage during the fight." },
+    { "id": "SUSHI_EXPRESS", "title": "Sushi Express", "description": "Finish the Sushi Belt Run with at least 8 seconds to spare." },
+    { "id": "NEVER_GIVE_UP", "title": "Pirates Never Give Up", "description": "Continue after a Game Over.", "secret": true },
+    { "id": "EXTRA_SPICY", "title": "Extra Spicy", "description": "Take a dip in the hot sauce of Isola Brace.", "secret": true }
+  ],
+  "platforms": {
+    "wavedash": { "game_id": "j9751ssr83vnd6cgg5za5mdbrx8jwt67" }
+  }
+}
