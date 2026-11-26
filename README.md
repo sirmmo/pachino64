@@ -162,3 +162,15 @@ On Wavedash the game stays behind Wavedash's loading screen until it calls `Wave
 `js/main.js` does it through `js/wavedash.js` when the models have loaded (each model loaded moves
 Wavedash's loading bar), or when loading fails, to show the error. Elsewhere (GitHub Pages, a local
 server) there is no `Wavedash` object and the calls do nothing.
+
+## Publishing on itch.io
+
+The same builds go to [itch.io](https://itch.io) with
+[butler](https://itch.io/docs/butler/), each to its own page as an HTML5 build: `pachino64` at https://sirmmo.itch.io/capitan-pachino-64.
+`sh tools/itch.sh [game]` builds them as for Wavedash and runs `butler push <build>
+sirmmo/<page>:html5`; without butler, or with `ITCH_DRY_RUN=1`, it only says what it would push.
+In CI, Actions > Itch > Run workflow does the same, with the repository secret `BUTLER_API_KEY`
+(an API key from https://itch.io/user/settings/api-keys). Each page must exist on itch.io before
+its first push (Dashboard > Create new project, kind HTML); after the first upload, tick "This
+file will be played in the browser" on it once.
+
