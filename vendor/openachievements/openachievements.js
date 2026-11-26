@@ -65,10 +65,34 @@
   // ---- Platforms. Each: name, account(), read() → {stats, unlocked}, write(op) → bool, flush(). ----
 
   // Wavedash (wavedash.com): the page has a global `Wavedash` (an object, or a promise of one).
+  // Stats are read only once the game has called Wavedash.init() (which shows the game): this
+  // script wraps init as soon as it loads, so load it before the game's own scripts. If init was
+  // called earlier, or cannot be wrapped, reading starts after INIT_WAIT anyway.
+  var INIT_WAIT = 20000;
+  var wavedashInit = (function () {
+    var w = window.Wavedash;
+    if (!w) return null;
+    return new Promise(function (resolve) {
+      setTimeout(resolve, INIT_WAIT);
+      (typeof w.then === 'function' ? w : Promise.resolve(w)).then(function (s) {
+        try {
+          var init = s && s.init;
+          if (typeof init !== 'function') return resolve();
+          s.init = function () {
+            resolve();
+            return init.apply(this, arguments);
+          };
+        } catch (e) { /* a frozen SDK: wait for the timeout */ }
+      }, resolve);
+    });
+  })();
+
   function wavedash() {
     var w = window.Wavedash;
     if (!w) return null;
-    var sdkP = typeof w.then === 'function' ? w : Promise.resolve(w);
+    var sdkP = (typeof w.then === 'function' ? w : Promise.resolve(w)).then(function (s) {
+      return (wavedashInit || Promise.resolve()).then(function () { return s; });
+    });
     var sdk = null;
     var requested = null;
     return {
@@ -168,6 +192,9 @@
 
   var CSS = [
     '.oa-toasts{position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;flex-direction:column;gap:8px;pointer-events:none;font:14px/1.3 system-ui,sans-serif}',
+    '.oa-toasts.oa-top{bottom:auto;top:16px}',
+    '.oa-toasts.oa-left{right:auto;left:16px}',
+    '.oa-toasts.oa-center{right:auto;left:50%;transform:translateX(-50%)}',
     '.oa-toast{display:flex;align-items:center;gap:10px;min-width:220px;max-width:320px;padding:10px 12px;border-radius:10px;background:rgba(20,22,28,.94);color:#f4f1e8;box-shadow:0 6px 24px rgba(0,0,0,.35);transform:translateY(12px);opacity:0;transition:transform .25s,opacity .25s}',
     '.oa-toast.oa-in{transform:none;opacity:1}',
     '.oa-toast img,.oa-item img,.oa-badge{width:40px;height:40px;border-radius:8px;flex:none;object-fit:cover}',
@@ -212,7 +239,7 @@
     this.core = null;
     this.manifest = null;
     this.queue = [];
-    this.handlers = { unlock: [], error: [], ready: [] };
+    this.handlers = { unlock: [], error: [], ready: [], listopen: [], listclose: [] };
     this.platforms = [];
     this.syncing = null;
     this.syncTimer = null;
@@ -240,7 +267,7 @@
       self.core = new Core(got[1].instance);
       self.key = 'openachievements:' + manifest.game;
       var saved = null;
-      try { saved = JSON.parse(window.localStorage.getItem(self.key) || 'null'); } catch (e) { saved = null; }
+      try { self.saved = window.localStorage.getItem(self.key); saved = JSON.parse(self.saved || 'null'); } catch (e) { saved = null; }
       var r = self.core.call({ op: 'new', manifest: manifest, progress: saved, now: now() });
       self.manifest = manifest;
       self.platforms = [wavedash(), steam(), newgrounds(self.core, manifest), gamejolt(self.core, manifest)]
@@ -251,8 +278,9 @@
       queued.forEach(function (q) { self[q[0]].apply(self, q[1]); });
       self._changed(r.unlocked);
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'hidden') self.sync();
+        if (document.visibilityState === 'hidden') { self._save(true); self.sync(); }
       });
+      window.addEventListener('pagehide', function () { self._save(true); });
       setInterval(function () { self.sync(); }, SYNC_EVERY);
       self.sync();
     });
@@ -280,8 +308,28 @@
     }
   };
 
+  // Saves the progress when it changed: at once with `now`, else at most once a second.
+  OpenAchievements.prototype._save = function (now) {
+    var self = this;
+    if (!this.core) return;
+    if (!now) {
+      if (!this.saveTimer) this.saveTimer = setTimeout(function () { self._save(true); }, 1000);
+      return;
+    }
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    try {
+      var text = JSON.stringify(this.core.call({ op: 'progress' }));
+      if (text !== this.saved) {
+        window.localStorage.setItem(this.key, text);
+        this.saved = text;
+      }
+    } catch (e) { /* private mode, or full */ }
+  };
+
   OpenAchievements.prototype._changed = function (unlocked) {
-    try { window.localStorage.setItem(this.key, JSON.stringify(this.core.call({ op: 'progress' }))); } catch (e) { /* private mode */ }
+    // An unlock is saved at once; counts can wait a second.
+    this._save(unlocked.length > 0);
     if (!unlocked.length) return;
     var self = this;
     var views = this.view();
@@ -301,7 +349,16 @@
     if (o.toasts !== true && this.platforms.some(function (p) { return p.shows; })) return;
     this._css();
     var box = document.querySelector('.oa-toasts');
-    if (!box) { box = el('div', 'oa-toasts'); document.body.appendChild(box); }
+    if (!box) {
+      // toastPosition: 'bottom-right' (default), 'bottom-left', 'bottom', 'top-right', 'top-left', 'top'.
+      var pos = String(o.toastPosition || 'bottom-right');
+      var cls = 'oa-toasts';
+      if (pos.indexOf('top') === 0) cls += ' oa-top';
+      if (/left$/.test(pos)) cls += ' oa-left';
+      else if (!/right$/.test(pos)) cls += ' oa-center';
+      box = el('div', cls);
+      document.body.appendChild(box);
+    }
     var t = el('div', 'oa-toast');
     t.setAttribute('role', 'status');
     var text = el('div');
@@ -323,7 +380,8 @@
     var s = el('style');
     s.id = 'oa-css';
     s.textContent = CSS;
-    document.head.appendChild(s);
+    // First in <head>, so the game's own rules for .oa-* win at equal specificity.
+    document.head.insertBefore(s, document.head.firstChild);
   };
 
   /** Adds to a `total` stat. Returns the achievements this unlocked (none while loading). */
@@ -347,7 +405,7 @@
     try { return this.core.call({ op: 'view' }); } catch (e) { this._error(e); return []; }
   };
 
-  /** on('unlock' | 'error' | 'ready', fn) */
+  /** on('unlock' | 'error' | 'ready' | 'listopen' | 'listclose', fn) */
   OpenAchievements.prototype.on = function (ev, fn) {
     (this.handlers[ev] = this.handlers[ev] || []).push(fn);
     return this;
@@ -370,7 +428,7 @@
       return Promise.resolve(platform.account()).then(function (account) {
         var r = core.call({ op: 'merge', account: account, remote: remote, now: now() });
         // Earned elsewhere: saved here too, without a toast.
-        try { window.localStorage.setItem(self.key, JSON.stringify(core.call({ op: 'progress' }))); } catch (e) { /* */ }
+        self._save(true);
         if (r.unlocked.length) r.unlocked.forEach(function (id) { self._emit('unlock', self.view().filter(function (v) { return v.id === id; })[0]); });
         var ops = core.call({ op: 'pending', platform: platform.name, account: account });
         var wrote = false;
@@ -381,7 +439,7 @@
             });
           });
         }, Promise.resolve()).then(function () {
-          try { window.localStorage.setItem(self.key, JSON.stringify(core.call({ op: 'progress' }))); } catch (e) { /* */ }
+          self._save(true);
           if (wrote) return platform.flush();
         });
       });
@@ -390,7 +448,15 @@
 
   /** Shows every achievement in a panel over the game (Esc or a click outside closes it). */
   OpenAchievements.prototype.showList = function () {
-    if (!this.core) return;
+    var self = this;
+    if (!this.core) {
+      if (!this.listWanted) {
+        this.listWanted = true;
+        this.ready.then(function () { if (self.listWanted) { self.listWanted = false; self.showList(); } });
+      }
+      return;
+    }
+    if (this.isListOpen()) return;
     this._css();
     var o = this.opts;
     var views = this.view();
@@ -417,7 +483,7 @@
       text.style.flex = '1';
       text.appendChild(el('div', 'oa-title', hidden ? (o.secretTitle || 'Secret achievement') : v.title));
       text.appendChild(el('div', 'oa-desc', hidden ? (o.secretText || 'Keep playing to find it.') : v.description));
-      if (!hidden && v.unlocked == null && v.progress) {
+      if (!hidden && v.unlocked == null && v.progress && v.progress[1] > 1) {
         var bar = el('div', 'oa-bar');
         var fill = el('i');
         fill.style.width = Math.round(100 * v.progress[0] / v.progress[1]) + '%';
@@ -431,22 +497,50 @@
     shade.appendChild(panel);
     function done() {
       shade.remove();
-      document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keyup', onKey, true);
+      self.closeList = null;
+      self._emit('listclose');
     }
+    // While the panel is open the game hears no keys; Esc closes it. Tab and Enter still move and
+    // press inside the panel (only the game's listeners are skipped).
     function onKey(e) {
-      if (e.key === 'Escape') { e.stopPropagation(); done(); }
+      if (!shade.contains(e.target)) e.stopImmediatePropagation();
+      else e.stopPropagation();
+      if (e.type === 'keydown' && e.key === 'Escape') { e.preventDefault(); done(); }
     }
     shade.addEventListener('click', function (e) { if (e.target === shade) done(); });
     close.addEventListener('click', done);
-    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('keyup', onKey, true);
     document.body.appendChild(shade);
+    this.closeList = done;
+    this._emit('listopen');
     close.focus();
+  };
+
+  /** Closes the list, if open. */
+  OpenAchievements.prototype.hideList = function () {
+    this.listWanted = false;
+    if (this.closeList) this.closeList();
+  };
+
+  /** Whether the list is open. */
+  OpenAchievements.prototype.isListOpen = function () {
+    return !!this.closeList;
+  };
+
+  /** Opens the list, or closes it if open (for a toolbar button or a key). */
+  OpenAchievements.prototype.toggleList = function () {
+    if (this.isListOpen() || this.listWanted) this.hideList();
+    else this.showList();
   };
 
   window.OpenAchievements = {
     /**
      * Starts tracking. Options: manifest (URL or object), wasm (URL of openachievements.wasm),
-     * toasts (true / false / unset: shown unless the platform shows its own), platforms (names
+     * toasts (true / false / unset: shown unless the platform shows its own), toastPosition
+     * ('bottom-right' by default, 'bottom-left', 'bottom', 'top-right', 'top-left', 'top'), platforms (names
      * to report to; all that are present by default), unlockedText, listTitle, secretTitle,
      * secretText (for translations). Also sets `window.openachievements`.
      */

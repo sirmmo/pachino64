@@ -104,13 +104,13 @@ from under his shadow, and hit him with the sword while he is stuck in the board
 browser, and reported to Wavedash when the game runs there.
 
 - **The list**: the *Achievements* button on the title and pause screens, `L` on the keyboard,
-  or Select/Back on a gamepad. `Esc` (or `L`, or B/Start) closes it.
+  or Select/Back on a gamepad. `Esc` (or B/Start/Select) closes it.
 - **The manifest**: `achievements.json` at the root (titles, descriptions, stats, thresholds, the
   Wavedash game id). The library is vendored in `vendor/openachievements/` and started in `index.html`.
 - **Adding one**: add it to `achievements.json`. If it is a count, give it a `stat` and a
   `threshold` (`golden_stars` is a best, set from the saved stars; `coins_collected` and
   `enemies_defeated` count up). Otherwise call `ach.unlock('ID')` where it happens in `js/main.js`
-  (the `ach` helper sends each unlock once per visit and reports coins in chunks of 10). Check the
+  (the `ach` helper reports coins in chunks of 10). Check the
   manifest with `cargo run -p openachievements-cli -- check achievements.json` in the
   openachievements repository, and give Wavedash the JSON from its `wavedash` command (Developer
   Portal › Achievements › Import JSON).

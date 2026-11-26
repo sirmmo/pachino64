@@ -465,18 +465,17 @@ const G = {
 function saveGame() { try { localStorage.setItem('pachino64', JSON.stringify({ stars: [...G.stars] })); } catch (e) { /* storage blocked */ } }
 
 // Achievements: achievements.json at the root, tracked by openachievements (vendor/openachievements,
-// started in index.html). Without it every call does nothing. Kept cheap: a one-off unlock is sent
-// once per visit, and coins are reported in chunks of 10 (and when pausing, on a star, on leaving).
+// started in index.html). Without it every call does nothing. Coins are reported in chunks of 10
+// (and when pausing, on a star, on leaving). While the list is open the library keeps the keys.
 const BOSS_STARS = { boss: 'KING_STEAK', ham: null, tuna: null, turkey: null, cleaver: 'MANNARONE' };
-const achSent = new Set();
 const ach = {
   coins: 0,
-  unlock(id) { if (!achSent.has(id)) { achSent.add(id); window.openachievements?.unlock(id); } },
+  unlock(id) { window.openachievements?.unlock(id); },
   add(stat, n = 1) { window.openachievements?.add(stat, n); },
   set(stat, v) { window.openachievements?.set(stat, v); },
   flushCoins() { if (ach.coins > 0) { window.openachievements?.add('coins_collected', ach.coins); ach.coins = 0; } },
-  isOpen: () => !!document.querySelector('.oa-shade'),
-  close() { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }, // the panel closes on Esc
+  isOpen: () => !!window.openachievements?.isListOpen(),
+  close() { window.openachievements?.hideList(); },
   open() {
     if (!window.openachievements || ach.isOpen()) return;
     if (G.mode === 'play') togglePause(); // the game waits under the panel
@@ -484,6 +483,7 @@ const ach = {
   },
 };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') ach.flushCoins(); });
+window.openachievements?.on('listclose', () => keys.clear()); // keys released while it was open never reached the game
 
 let toastT = 0, bannerT = 0;
 function toast(msg, t = 2.2) { $('toast').textContent = msg; $('toast').classList.add('show'); toastT = t; }
@@ -2726,7 +2726,6 @@ const keys = new Set();
 const KEYMAP = { jump: ['Space', 'KeyK'], crouch: ['ShiftLeft', 'ShiftRight', 'KeyZ'], attack: ['KeyJ', 'KeyX'], talk: ['KeyE'] };
 window.addEventListener('keydown', (e) => {
   if (e.repeat) { if (e.code === 'Space') e.preventDefault(); return; }
-  if (ach.isOpen()) { if (e.code === 'KeyL') ach.close(); return; } // the achievements panel has the keys
   keys.add(e.code); initAudio();
   if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
   if (G.mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) { startGame(); return; }

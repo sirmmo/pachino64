@@ -7,7 +7,11 @@
 <script src="js/wavedash.js"></script>
 <!-- Achievements: achievements.json, tracked by openachievements (vendor/openachievements). -->
 <script src="vendor/openachievements/openachievements.js"></script>
-<script>window.OpenAchievements && OpenAchievements.start({ manifest: 'achievements.json', wasm: 'vendor/openachievements/openachievements.wasm' });</script>
+<script>
+  // before js/main.js: on Wavedash the library waits for the game's Wavedash.init() to read stats
+  window.OpenAchievements && OpenAchievements.start({ manifest: 'achievements.json', wasm: 'vendor/openachievements/openachievements.wasm',
+    toastPosition: window.matchMedia && matchMedia('(pointer: coarse)').matches ? 'top-right' : 'bottom-right' }); // touch: clear of the buttons
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Nunito:wght@700;900&display=swap" rel="stylesheet">
 <style>
@@ -72,11 +76,11 @@
   #title .btn { font-size:20px; padding:8px 20px; margin-top:18px; }
   .btn { margin-top:22px; font-size:26px; padding:10px 28px; background:var(--red); color:#fff; border:4px solid var(--ink); border-radius:16px; cursor:pointer; font-family:'Luckiest Guy'; letter-spacing:1px; }
   /* the achievements panel and toasts (openachievements), in the game's colours */
-  body .oa-panel, body .oa-toast { font-family:'Nunito',system-ui,sans-serif; background:#2a1840; border:4px solid var(--ink); }
-  body .oa-head h2 { font-family:'Luckiest Guy','Impact',sans-serif; font-weight:400; font-size:28px; letter-spacing:1px; color:var(--gold); }
-  body .oa-title { font-weight:900; } body .oa-kicker { color:var(--gold); } body .oa-item { border-top-color:#433060; }
-  body.touch .oa-toasts { top:120px; bottom:auto; } /* clear of the touch buttons */
-  body .oa-badge { background:var(--gold); } body .oa-bar i { background:var(--gold); } body .oa-bar { background:#433060; }
+  .oa-panel, .oa-toast { font-family:'Nunito',system-ui,sans-serif; background:#2a1840; border:4px solid var(--ink); }
+  .oa-head h2 { font-family:'Luckiest Guy','Impact',sans-serif; font-weight:400; font-size:28px; letter-spacing:1px; color:var(--gold); }
+  .oa-title { font-weight:900; } .oa-kicker { color:var(--gold); } .oa-item { border-top-color:#433060; }
+  .oa-toasts.oa-top { top:120px; } /* below the lives and the pause button */
+  .oa-badge { background:var(--gold); } .oa-bar i { background:var(--gold); } .oa-bar { background:#433060; }
   #loading { position:fixed; inset:0; background:#2a1840; color:#fff; display:flex; align-items:center; justify-content:center; font-size:40px; z-index:10; }
   #fade { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition: opacity .35s; }
   #fade.on { opacity:1; }
