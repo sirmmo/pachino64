@@ -1,7 +1,8 @@
 // openachievements in the browser: the Rust core (openachievements.wasm) keeps the player's
 // stats and achievements; this file saves them in localStorage, reports them to the platform the
-// game runs on (Wavedash, Steam through a desktop wrapper, Newgrounds, Game Jolt), and shows a
-// toast for each unlock and a list on request. A plain script, so module and classic pages alike
+// game runs on (Wavedash, Steam through a desktop wrapper, Newgrounds, Game Jolt) and, if the
+// player opts in, pins them as badges on Badge Collector, and shows a toast for each unlock and a
+// list on request. A plain script, so module and classic pages alike
 // can use it:
 //
 //   <script src="openachievements.js"></script>
@@ -188,6 +189,69 @@
     return httpPlatform('gamejolt', core, 'gj', { user: user, token: token }, function () { return 'gamejolt:' + user; });
   }
 
+  // Badge Collector (badgecollector.org), when the manifest has `badgecollector` and the player
+  // opted in from the list: the player's email is hashed here (sha256 of the trimmed, lowercased,
+  // NFC email) and only the hash is kept and sent. Write-only: nothing is read back, so every
+  // unlock is sent once; a duplicate (or 409) counts as sent, a failure goes again next sync.
+  function badgeCollector(core, emailHash) {
+    var account = 'badgecollector:' + emailHash;
+    // The page, without its query or fragment (they may carry a portal's session or token).
+    var evidence = window.location.origin + window.location.pathname;
+    if (!/^https?:/.test(evidence)) evidence = undefined;
+    return {
+      name: 'badgecollector',
+      hash: emailHash,
+      account: function () { return account; },
+      read: function () { return { stats: {}, unlocked: [] }; },
+      // Each award on its own: one refused badge (not on Badge Collector yet) does not hold up the
+      // others; the failures come back as one error at the end, and go again next sync.
+      stopped: false,
+      writeAll: function (ops, done) {
+        var self = this;
+        var failed = [];
+        return ops.reduce(function (p, op) {
+          return p.then(function () {
+            // The player stopped collecting meanwhile: send nothing more, record nothing.
+            if (op.op !== 'unlock' || self.stopped) return;
+            var req = core.call({ op: 'bc_award', id: op.id, email_hash: emailHash, evidence: evidence });
+            return withTimeout(fetch(req.url, {
+              method: req.method,
+              headers: (req.headers || []).reduce(function (h, kv) { h[kv[0]] = kv[1]; return h; }, {}),
+              body: req.body,
+            }).then(function (r) {
+              return r.text().then(function (body) {
+                core.call({ op: 'bc_parse_award', status: r.status, body: body });
+                if (!self.stopped) done(op);
+              });
+            }), 'badgecollector').catch(function (e) {
+              failed.push(op.id + ': ' + (e && e.message ? e.message : e));
+              // Slowed down: the rest waits for the next sync.
+              if (/\b429\b/.test(String(e && e.message))) throw e;
+            });
+          });
+        }, Promise.resolve()).then(function () {
+          if (failed.length) throw new Error('badgecollector: ' + failed.length + ' not sent yet (' + failed[0] + ')');
+        });
+      },
+      write: function () { return true; },
+      flush: function () {},
+    };
+  }
+
+  function sha256Hex(text) {
+    if (!window.crypto || !window.crypto.subtle) return Promise.reject(new Error('no SubtleCrypto here (an https page is needed)'));
+    return window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (d) {
+      return Array.prototype.map.call(new Uint8Array(d), function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join('');
+    });
+  }
+
+  /** Badge Collector's email hash: sha256(lowercase(nfc(email))), as its SDKs compute it. */
+  function hashEmail(email) {
+    return sha256Hex(String(email).trim().toLowerCase().normalize('NFC'));
+  }
+
+  var BADGE_SITE = 'https://badgecollector.org';
+
   // ---- Toasts and the list. ----
 
   var CSS = [
@@ -213,6 +277,16 @@
     '.oa-bar{height:5px;border-radius:3px;background:#2a2d36;margin-top:5px;overflow:hidden}',
     '.oa-bar i{display:block;height:100%;background:#d9a43a}',
     '.oa-count{color:#c9c4b8}',
+    '.oa-bc{margin:4px 0 10px;padding:12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}',
+    '.oa-bc p{margin:0 0 8px;opacity:.8;font-size:13px}',
+    '.oa-bc p.oa-bc-state{opacity:1;font-size:14px}',
+    '.oa-bc form{display:flex;flex-wrap:wrap;gap:8px}',
+    '.oa-bc input{flex:1 1 200px;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid #3a3e4a;background:rgba(0,0,0,.3);color:inherit;font:inherit}',
+    '.oa-bc button{padding:8px 12px;border-radius:8px;border:0;background:#d9a43a;color:#20160a;font:inherit;font-weight:700;cursor:pointer}',
+    '.oa-bc button.oa-quiet{background:none;color:inherit;opacity:.8;font-weight:400;text-decoration:underline;padding:8px 4px}',
+    '.oa-bc a{color:#d9a43a}',
+    '.oa-bc-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}',
+    '.oa-bc-error{color:#ff8a7a}',
   ].join('\n');
 
   function el(tag, cls, text) {
@@ -273,6 +347,7 @@
       self.platforms = [wavedash(), steam(), newgrounds(self.core, manifest), gamejolt(self.core, manifest)]
         .filter(Boolean)
         .filter(function (p) { return o.platforms == null || o.platforms.indexOf(p.name) >= 0; });
+      self._badgeCollectorStart();
       var queued = self.queue;
       self.queue = null;
       queued.forEach(function (q) { self[q[0]].apply(self, q[1]); });
@@ -341,6 +416,157 @@
     });
     clearTimeout(this.syncTimer);
     this.syncTimer = setTimeout(function () { self.sync(); }, 1500);
+  };
+
+  // ---- Badge Collector: the player's opt-in, kept as the email's hash only. ----
+
+  OpenAchievements.prototype._badgeCollectorOffered = function () {
+    var o = this.opts;
+    return !!(this.manifest && this.manifest.platforms && this.manifest.platforms.badgecollector) &&
+      (o.platforms == null || o.platforms.indexOf('badgecollector') >= 0);
+  };
+
+  OpenAchievements.prototype._badgeCollectorKey = function () {
+    return this.key + ':badgecollector';
+  };
+
+  OpenAchievements.prototype._badgeCollectorStart = function () {
+    if (!this._badgeCollectorOffered()) return;
+    var hash = null;
+    try { hash = window.localStorage.getItem(this._badgeCollectorKey()); } catch (e) { hash = null; }
+    if (hash && /^[0-9a-f]{64}$/.test(hash)) this.platforms.push(badgeCollector(this.core, hash));
+  };
+
+  /** The Badge Collector wall the player's badges go to, or null when they have not opted in. */
+  OpenAchievements.prototype.badgeCollectorWall = function () {
+    var p = this._badgeCollector();
+    return p ? BADGE_SITE + '/m/' + p.hash + '/' : null;
+  };
+
+  OpenAchievements.prototype._badgeCollector = function () {
+    return this.platforms.filter(function (p) { return p.name === 'badgecollector'; })[0] || null;
+  };
+
+  /**
+   * Starts collecting the achievements as badges on Badge Collector for this email: only its hash
+   * is kept (in localStorage) and sent. Every achievement unlocked so far goes too. Resolves to
+   * the player's wall.
+   */
+  OpenAchievements.prototype.collectBadges = function (email) {
+    var self = this;
+    if (!this.core || !this._badgeCollectorOffered()) return Promise.reject(new Error('badgecollector: not offered by this game'));
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim())) return Promise.reject(new Error('That does not look like an email address.'));
+    return hashEmail(email).then(function (hash) {
+      self.stopCollectingBadges();
+      try { window.localStorage.setItem(self._badgeCollectorKey(), hash); } catch (e) { /* kept for this visit only */ }
+      self.platforms.push(badgeCollector(self.core, hash));
+      // After a sync already running (it started without this platform).
+      Promise.resolve(self.syncing).then(function () { return self.sync(); });
+      return BADGE_SITE + '/m/' + hash + '/';
+    });
+  };
+
+  /**
+   * Stops collecting badges and forgets the email's hash, with the record of what was sent for it
+   * (badges already pinned stay pinned; opting in again sends them again, as duplicates).
+   */
+  OpenAchievements.prototype.stopCollectingBadges = function () {
+    var self = this;
+    try { window.localStorage.removeItem(this._badgeCollectorKey()); } catch (e) { /* nothing kept */ }
+    this.platforms.forEach(function (p) {
+      if (p.name !== 'badgecollector' || !self.core) return;
+      p.stopped = true;
+      try { self.core.call({ op: 'forget', account: p.account() }); } catch (e) { self._error(e); }
+    });
+    this.platforms = this.platforms.filter(function (p) { return p.name !== 'badgecollector'; });
+    this._save(true);
+  };
+
+  /** How many unlocked achievements reached Badge Collector, and how many wait: {sent, waiting}. */
+  OpenAchievements.prototype._badgeCollectorCounts = function () {
+    var p = this._badgeCollector();
+    if (!p) return null;
+    try {
+      var progress = this.core.call({ op: 'progress' });
+      var synced = (progress.synced || {})[p.account()];
+      // Before the first sync every unlock waits.
+      if (!synced) return { sent: 0, waiting: Object.keys(progress.unlocked || {}).length };
+      var pending = this.core.call({ op: 'pending', platform: 'badgecollector', account: p.account() });
+      return { sent: (synced.unlocked || []).length, waiting: pending.length };
+    } catch (e) { return null; }
+  };
+
+  // The panel's Badge Collector box: an offer, the email form, or the state and a way out.
+  OpenAchievements.prototype._badgeCollectorBox = function (opened) {
+    var self = this;
+    var o = this.opts;
+    var box = el('div', 'oa-bc');
+    function render(mode, message) {
+      box.textContent = '';
+      var p = self._badgeCollector();
+      if (p) {
+        var c = self._badgeCollectorCounts() || { sent: 0, waiting: 0 };
+        box.appendChild(el('p', 'oa-bc-state', o.badgeLinkedText || 'Collecting these as badges on Badge Collector.'));
+        box.appendChild(el('p', null, c.waiting
+          ? c.sent + ' sent, ' + c.waiting + ' on the way. Badges show on your wall a few minutes after they are sent.'
+          : (c.sent ? c.sent + ' sent. ' : '') + 'New ones are sent as you unlock them and show on your wall a few minutes later.'));
+        var row = el('div', 'oa-bc-row');
+        var wall = el('a', null, 'Your badge wall ↗');
+        wall.href = BADGE_SITE + '/m/' + p.hash + '/';
+        wall.target = '_blank';
+        wall.rel = 'noopener';
+        var stop = el('button', 'oa-quiet', 'Stop collecting');
+        stop.type = 'button';
+        stop.addEventListener('click', function () { self.stopCollectingBadges(); render('offer'); });
+        row.appendChild(wall);
+        row.appendChild(stop);
+        box.appendChild(row);
+        return;
+      }
+      if (mode === 'form') {
+        box.appendChild(el('p', null, o.badgeExplainText ||
+          'Your email is hashed on this device and only the hash is sent: your achievements become badges on a public wall at badgecollector.org, a few minutes after each unlock.'));
+        var form = el('form');
+        form.noValidate = true; // our message, not the browser's bubble (hidden in some frames)
+        var input = el('input');
+        input.type = 'email';
+        input.required = true;
+        input.autocomplete = 'email';
+        input.placeholder = 'you@example.com';
+        input.setAttribute('aria-label', 'Email');
+        var go = el('button', null, 'Collect');
+        go.type = 'submit';
+        var cancel = el('button', 'oa-quiet', 'Cancel');
+        cancel.type = 'button';
+        cancel.addEventListener('click', function () { render('offer'); });
+        form.appendChild(input);
+        form.appendChild(go);
+        form.appendChild(cancel);
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          go.disabled = true;
+          self.collectBadges(input.value).then(function () { render(); }, function (err) {
+            go.disabled = false;
+            render('form', err && err.message ? err.message : String(err));
+          });
+        });
+        box.appendChild(form);
+        if (message) box.appendChild(el('p', 'oa-bc-error', message));
+        setTimeout(function () { (box.querySelector('input') || {}).focus && box.querySelector('input').focus(); }, 0);
+        return;
+      }
+      var offer = el('button', null, o.badgeOfferText || 'Collect these as badges on Badge Collector');
+      offer.type = 'button';
+      offer.addEventListener('click', function () { render('form'); });
+      box.appendChild(offer);
+    }
+    render(opened ? 'form' : 'offer');
+    // The counts change as awards go out: refreshed while the panel is open.
+    var timer = setInterval(function () {
+      if (!box.isConnected) { clearInterval(timer); return; }
+      if (self._badgeCollector() && !box.querySelector('form')) render();
+    }, 2000);
+    return box;
   };
 
   OpenAchievements.prototype._toast = function (v) {
@@ -432,6 +658,12 @@
         if (r.unlocked.length) r.unlocked.forEach(function (id) { self._emit('unlock', self.view().filter(function (v) { return v.id === id; })[0]); });
         var ops = core.call({ op: 'pending', platform: platform.name, account: account });
         var wrote = false;
+        if (platform.writeAll) {
+          return platform.writeAll(ops, function (op) {
+            core.call({ op: 'done', account: account, done: op });
+            self._save(true);
+          });
+        }
         return ops.reduce(function (p, op) {
           return p.then(function () {
             return Promise.resolve(platform.write(op)).then(function (ok) {
@@ -474,6 +706,7 @@
     head.appendChild(h);
     head.appendChild(close);
     panel.appendChild(head);
+    if (this._badgeCollectorOffered()) panel.appendChild(this._badgeCollectorBox());
     var base = this.base;
     views.forEach(function (v) {
       var hidden = v.secret && v.unlocked == null;
@@ -542,7 +775,8 @@
      * toasts (true / false / unset: shown unless the platform shows its own), toastPosition
      * ('bottom-right' by default, 'bottom-left', 'bottom', 'top-right', 'top-left', 'top'), platforms (names
      * to report to; all that are present by default), unlockedText, listTitle, secretTitle,
-     * secretText (for translations). Also sets `window.openachievements`.
+     * secretText, badgeOfferText, badgeExplainText, badgeLinkedText (for translations). Also sets
+     * `window.openachievements`.
      */
     start: function (opts) {
       var t = new OpenAchievements(opts);

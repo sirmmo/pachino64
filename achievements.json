@@ -29,6 +29,7 @@
     { "id": "EXTRA_SPICY", "title": "Extra Spicy", "description": "Take a dip in the hot sauce of Isola Brace.", "secret": true }
   ],
   "platforms": {
-    "wavedash": { "game_id": "j9751ssr83vnd6cgg5za5mdbrx8jwt67" }
+    "wavedash": { "game_id": "j9751ssr83vnd6cgg5za5mdbrx8jwt67" },
+    "badgecollector": { "client": "pachino64" }
   }
 }

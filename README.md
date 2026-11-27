@@ -114,6 +114,12 @@ browser, and reported to Wavedash when the game runs there.
   manifest with `cargo run -p openachievements-cli -- check achievements.json` in the
   openachievements repository, and give Wavedash the JSON from its `wavedash` command (Developer
   Portal › Achievements › Import JSON).
+- **Badge Collector**: from the list a player can collect the achievements as badges on
+  [badgecollector.org](https://badgecollector.org) (an email, hashed in the browser; only the hash
+  is kept and sent). The game is the public client `pachino64` there, allowed from ingmmo.com,
+  itch.io and Wavedash; a new achievement needs its badge too: `openachievements badgecollector
+  achievements.json --name "Capitan Pachino 64" --origin … -o <badgecollector checkout>`, then a
+  pull request there.
 
 ## Run locally
 
